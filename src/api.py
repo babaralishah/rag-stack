@@ -6,7 +6,7 @@ from fastapi import FastAPI, UploadFile, File, HTTPException
 from pydantic import BaseModel
 import json
 
-from src.config import UPLOADS_DIR, STORE_DIR, EMBED_MODEL, OLLAMA_MODEL, TOP_K, MIN_SCORE
+from src.config import UPLOADS_DIR, STORE_DIR, EMBED_MODEL, EMBED_DIM, OLLAMA_MODEL, TOP_K, MIN_SCORE
 from src.utils import file_sha256
 from src.document_loader import load_pdf
 from src.chunker import chunk_text
@@ -146,7 +146,7 @@ def query(req: QueryRequest):
     if not index_path.exists() or not meta_path.exists():
         return QueryResponse(answer="No documents indexed yet. Upload a PDF first.", sources=[])
 
-    store = load_or_create_store(dim=qv.shape[1])
+    store = load_or_create_store(dim=EMBED_DIM)
     qv = emb.embed_query(q)
     retrieved = store.search(qv, top_k=req.top_k)
 
