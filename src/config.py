@@ -1,0 +1,12 @@
+from pathlib import Path
+
+DATA_DIR = Path("data")
+UPLOADS_DIR = DATA_DIR / "uploads"
+
+STORE_DIR = Path("storage") / "faiss"
+
+EMBED_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
+OLLAMA_MODEL = "llama3.2:3b"
+
+TOP_K = 5
+MIN_SCORE = 0.35
