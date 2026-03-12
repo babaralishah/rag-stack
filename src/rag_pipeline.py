@@ -55,7 +55,7 @@ def rag_answer(
         }
 
     top_score = retrieved[0]["score"]
-    if top_score < min_score or top_score < 0.25:
+    if top_score < min_score:
         return {
             "answer": "I don’t know based on the documents.",
             "sources": [
