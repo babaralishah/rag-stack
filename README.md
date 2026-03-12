@@ -1,3 +1,8 @@
+## 🎬 Demo
+
+![Demo](docs/demo.gif)
+
+
 # 🧠 Local RAG App (Fully Local, No Paid APIs)
 
 A fully local Retrieval-Augmented Generation (RAG) system built with:
