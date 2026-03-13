@@ -1,0 +1,27 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      # Point the app to Ollama running on Windows host
+      OLLAMA_BASE_URL: "http://host.docker.internal:11434"
+    ports:
+      - "8000:8000"
+    volumes:
+      # Persist vector index + metadata
+      - ./storage:/app/storage
+      # Persist uploaded files
+      - ./data/uploads:/app/data/uploads
+
+  ui:
+    build:
+      context: .
+      dockerfile: Dockerfile.ui
+    environment:
+      # UI calls API by container name (Docker network)
+      API_BASE_URL: "http://api:8000"
+    ports:
+      - "8501:8501"
+    depends_on:
+      - api

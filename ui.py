@@ -1,3 +1,7 @@
+import os
+API_BASE_URL = os.getenv("API_BASE_URL", "http://127.0.0.1:8000")
+
+
 import streamlit as st
 import requests
 from typing import Dict, Any
@@ -21,7 +25,7 @@ if uploaded_file is not None:
         with st.spinner("Uploading and indexing..."):
             try:
                 files = {"file": (uploaded_file.name, uploaded_file.getvalue(), "application/pdf")}
-                r = requests.post(f"{API_BASE}/upload", files=files, timeout=120)
+                r = requests.post(f"{API_BASE_URL}/upload", files=files, timeout=120)
                 r.raise_for_status()
                 st.success(f"Upload result: {r.json()}")
             except Exception as e:
@@ -42,7 +46,7 @@ if st.button("Ask"):
         with st.spinner("Thinking..."):
             try:
                 payload = {"question": question, "top_k": 5}
-                r = requests.post(f"{API_BASE}/query", json=payload, timeout=120)
+                r = requests.post(f"{API_BASE_URL}/query", json=payload, timeout=120)
                 r.raise_for_status()
                 data: Dict[str, Any] = r.json()
 
