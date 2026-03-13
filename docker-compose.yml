@@ -13,6 +13,8 @@ services:
       - ./storage:/app/storage
       # Persist uploaded files
       - ./data/uploads:/app/data/uploads
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
   ui:
     build:
