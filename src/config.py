@@ -14,3 +14,8 @@ MIN_SCORE = 0.35
 EMBED_DIM = 384
 
 MIN_SIMILARITY = 0.30
+
+import os
+
+OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+API_BASE_URL = os.getenv("API_BASE_URL", "http://127.0.0.1:8000")

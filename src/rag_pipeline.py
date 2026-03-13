@@ -1,10 +1,12 @@
 import logging
 import requests
 from typing import List, Dict, Any, Tuple
+from src.config import MIN_SIMILARITY, OLLAMA_BASE_URL, API_BASE_URL
 
 logger = logging.getLogger(__name__)
 
-OLLAMA_URL = "http://localhost:11434/api/generate"
+OLLAMA_URL = OLLAMA_BASE_URL
+# OLLAMA_URL = "http://localhost:11434/api/generate"
 DEFAULT_MODEL = "llama3.2:3b"
 
 def build_context(results: List[Dict[str, Any]], max_chars: int = 3500) -> str:
