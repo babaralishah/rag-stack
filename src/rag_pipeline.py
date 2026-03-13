@@ -5,7 +5,7 @@ from src.config import MIN_SIMILARITY, OLLAMA_BASE_URL, API_BASE_URL
 
 logger = logging.getLogger(__name__)
 
-OLLAMA_URL = OLLAMA_BASE_URL
+OLLAMA_URL = OLLAMA_BASE_URL + "/api/generate"
 # OLLAMA_URL = "http://localhost:11434/api/generate"
 DEFAULT_MODEL = "llama3.2:3b"
 
@@ -73,14 +73,12 @@ def rag_answer(
 
     context = build_context(retrieved)
 
-    prompt = f"""You are a strict document-based assistant.
+    prompt = f"""You are a careful assistant.
 
-    Rules:
-    - Use ONLY the information provided in CONTEXT.
-    - Do NOT use prior knowledge.
-    - If the answer is not explicitly stated in the context, say:
-    "I don’t know based on the documents."
-    - Keep answer short and factual.
+    Use ONLY the provided context to answer the question.
+    If the answer is clearly supported by the context, answer directly and briefly.
+    If the answer is not present in the context, say:
+    "I don't know based on the documents."
 
     CONTEXT:
     {context}
