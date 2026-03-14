@@ -4,10 +4,11 @@
 import logging
 from pathlib import Path
 
-from document_loader import load_pdf
-from chunker import chunk_text
-from embedder import HFEmbedder
-from vector_store import FaissVectorStore
+from src.document_loader import load_pdf
+from src.chunker import chunk_text
+from src.embedder import HFEmbedder
+from src.config import TOP_K
+from src.vector_store import FaissVectorStore
 
 logging.basicConfig(
     level=logging.INFO,
@@ -75,7 +76,7 @@ def main():
             continue
 
         qv = embedder.embed_query(q)
-        results = vs.search(qv, top_k=5)
+        results = vs.search(qv, top_k=TOP_K)
 
         print("\n=== TOP CHUNKS ===")
         if not results:

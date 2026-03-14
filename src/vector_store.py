@@ -10,6 +10,8 @@ import numpy as np
 
 import faiss
 
+from src.config import TOP_K
+
 logger = logging.getLogger(__name__)
 
 class FaissVectorStore:
@@ -35,7 +37,7 @@ class FaissVectorStore:
 
         logger.info("Added %d vectors. Total now: %d", len(texts), len(self.records))
 
-    def search(self, query_vec: np.ndarray, top_k: int = 5) -> List[Dict[str, Any]]:
+    def search(self, query_vec: np.ndarray, top_k: int = TOP_K) -> List[Dict[str, Any]]:
         if query_vec.dtype != np.float32:
             query_vec = query_vec.astype("float32")
 
