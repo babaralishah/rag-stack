@@ -1,4 +1,6 @@
 import os
+
+from src.config import TOP_K
 API_BASE_URL = os.getenv("API_BASE_URL", "http://127.0.0.1:8000")
 
 
@@ -45,7 +47,7 @@ if st.button("Ask"):
     else:
         with st.spinner("Thinking..."):
             try:
-                payload = {"question": question, "top_k": 5}
+                payload = {"question": question, "top_k": TOP_K}
                 r = requests.post(f"{API_BASE_URL}/query", json=payload, timeout=120)
                 r.raise_for_status()
                 data: Dict[str, Any] = r.json()

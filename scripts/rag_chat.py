@@ -1,12 +1,12 @@
 import logging
 from pathlib import Path
 
-from document_loader import load_pdf
-from chunker import chunk_text
-from embedder import HFEmbedder
-from src.config import OLLAMA_MODEL
-from vector_store import FaissVectorStore
-from rag_pipeline import rag_answer
+from src.document_loader import load_pdf
+from src.chunker import chunk_text
+from src.embedder import HFEmbedder
+from src.config import OLLAMA_MODEL, TOP_K
+from src.vector_store import FaissVectorStore
+from src.rag_pipeline import rag_answer
 
 logging.basicConfig(
     level=logging.INFO,
@@ -15,7 +15,6 @@ logging.basicConfig(
 
 STORE_DIR = "storage/faiss"
 PDF_PATH = "data/sample.pdf"
-TOP_K = 5
 
 def ensure_index(embedder: HFEmbedder) -> FaissVectorStore:
     store_path = Path(STORE_DIR)

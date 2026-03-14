@@ -1,14 +1,14 @@
 import logging
 import requests
 from typing import List, Dict, Any, Tuple
-from src.config import MIN_SIMILARITY, OLLAMA_BASE_URL, API_BASE_URL, OLLAMA_MODEL
+from src.config import MAX_CHARS, MIN_SIMILARITY, OLLAMA_BASE_URL, API_BASE_URL, OLLAMA_MODEL
 
 logger = logging.getLogger(__name__)
 
 OLLAMA_URL = OLLAMA_BASE_URL + "/api/generate"
 DEFAULT_MODEL = OLLAMA_MODEL
 
-def build_context(results: List[Dict[str, Any]], max_chars: int = 3500) -> str:
+def build_context(results: List[Dict[str, Any]], max_chars: int = MAX_CHARS) -> str:
     """
     Turn retrieved chunks into a compact context block.
     """
