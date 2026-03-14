@@ -4,6 +4,7 @@ from typing import Optional, List, Dict, Any
 
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from pydantic import BaseModel
+
 import json
 
 from src.config import UPLOADS_DIR, STORE_DIR, EMBED_MODEL, EMBED_DIM, OLLAMA_MODEL, TOP_K, MIN_SCORE
