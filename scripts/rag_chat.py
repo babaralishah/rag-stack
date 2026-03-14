@@ -4,6 +4,7 @@ from pathlib import Path
 from document_loader import load_pdf
 from chunker import chunk_text
 from embedder import HFEmbedder
+from src.config import OLLAMA_MODEL
 from vector_store import FaissVectorStore
 from rag_pipeline import rag_answer
 
@@ -50,7 +51,7 @@ def main():
             question=q,
             retrieved=retrieved,
             min_score=0.35,
-            model="llama3.2:3b",
+            model=OLLAMA_MODEL,
         )
 
         print("\n=== ANSWER ===")

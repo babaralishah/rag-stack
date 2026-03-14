@@ -3,8 +3,10 @@ import time
 import threading
 import requests
 
+from src.config import OLLAMA_MODEL
+
 OLLAMA_URL = "http://localhost:11434/api/generate"
-MODEL = "llama3.2:3b"
+MODEL = OLLAMA_MODEL
 
 SYSTEM_PROMPT = """You are a helpful assistant.
 Follow the user's instructions carefully.
@@ -128,45 +130,3 @@ def spinner(stop_event: threading.Event, message="Assistant: thinking "):
 
 if __name__ == "__main__":
     main()
-
-
-# import json
-# import sys
-# import requests
-
-# OLLAMA_URL = "http://localhost:11434/api/generate"
-# # MODEL = "llama3.1:latest"
-# MODEL = "llama3.2:3b"
-
-# def main():
-#     # prompt = "Say hello in one sentence, and tell me the number 7 squared."
-#     prompt = "Explain RAG (LLMs) in simple terms."
-#     payload = {
-#         "model": MODEL,
-#         "prompt": prompt,
-#         "stream": False, # False: Wait for the full answer. True: Send words one-by-one as they generate.
-#         "temperature": 0.1, # 0.1 for RAG/Facts, 0.5 for Chat, 1.0 for Creative Writing
-#     }
-
-#     try:
-#         r = requests.post(OLLAMA_URL, json=payload, timeout=60)
-#         r.raise_for_status()
-#     except requests.exceptions.ConnectionError:
-#         print("ERROR: Cannot connect to Ollama at http://localhost:11434")
-#         print("Fix: Make sure Ollama is installed and running. Try: `ollama serve` (or open the Ollama app).")
-#         sys.exit(1)
-#     except requests.exceptions.HTTPError as e:
-#         print("ERROR: Ollama returned an HTTP error:", e)
-#         print("Response:", r.text)
-#         sys.exit(1)
-#     except requests.exceptions.Timeout:
-#         print("ERROR: Request timed out. The model may still be downloading or your machine is slow.")
-#         print("Fix: Try again, or use a smaller model like llama3.2:3b.")
-#         sys.exit(1)
-
-#     data = r.json()
-#     print("\n=== Ollama Response ===")
-#     print(data.get("response", "").strip())
-
-# if __name__ == "__main__":
-#     main()
