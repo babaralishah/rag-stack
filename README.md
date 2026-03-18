@@ -1,3 +1,12 @@
+---
+title: RAG LLM App
+emoji: 🤖
+colorFrom: blue
+colorTo: green
+sdk: docker
+app_file: app.py
+---
+
 ## 🎬 Demo
 
 ![Local RAG Demo](docs/demo.gif)
