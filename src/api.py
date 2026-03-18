@@ -28,6 +28,10 @@ logger = logging.getLogger("api")
 
 app = FastAPI(title="Local RAG API", version="0.1")
 
+@app.get("/")
+def home():
+    return {"message": "RAG app is running 🚀"}
+
 # ---- Global singletons (simple + fine for learning)
 embedder: Optional[HFEmbedder] = None
 vs: Optional[FaissVectorStore] = None
