@@ -1,0 +1,80 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: local-rag-api
+    environment:
+      OLLAMA_BASE_URL: "http://host.docker.internal:11434"
+      PYTHONUNBUFFERED: "1"
+      WATCHFILES_FORCE_POLLING: "true"
+    ports:
+      - "8000:8000"
+    volumes:
+      - .:/app
+    working_dir: /app
+    command: >
+      uvicorn src.api:app
+      --host 0.0.0.0
+      --port 8000
+      --reload
+      --reload-dir /app/src
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  ui:
+    build:
+      context: .
+      dockerfile: Dockerfile.ui
+    container_name: local-rag-ui
+    environment:
+      API_BASE_URL: "http://api:8000"
+      PYTHONUNBUFFERED: "1"
+    ports:
+      - "8501:8501"
+    volumes:
+      - .:/app
+    # volumes:
+    # - ./src:/app/src
+    # - ./ui.py:/app/ui.py
+    # - ./storage:/app/storage
+    # - ./data:/app/data
+    working_dir: /app
+    command: >
+      streamlit run ui.py
+      --server.address 0.0.0.0
+      --server.port 8501
+    depends_on:
+      - api
+
+
+
+# services:
+#   api:
+#     build:
+#       context: .
+#       dockerfile: Dockerfile
+#     environment:
+#       # Point the app to Ollama running on Windows host
+#       OLLAMA_BASE_URL: "http://host.docker.internal:11434"
+#     ports:
+#       - "8000:8000"
+#     volumes:
+#       # Persist vector index + metadata
+#       - ./storage:/app/storage
+#       # Persist uploaded files
+#       - ./data/uploads:/app/data/uploads
+#     extra_hosts:
+#       - "host.docker.internal:host-gateway"
+
+#   ui:
+#     build:
+#       context: .
+#       dockerfile: Dockerfile.ui
+#     environment:
+#       # UI calls API by container name (Docker network)
+#       API_BASE_URL: "http://api:8000"
+#     ports:
+#       - "8501:8501"
+#     depends_on:
+#       - api

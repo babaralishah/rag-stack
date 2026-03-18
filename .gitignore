@@ -1,0 +1,28 @@
+# Virtual env
+.venv/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Logs
+rag.log
+
+# Vector DB
+storage/
+
+# Uploaded files
+data/uploads/
+
+# VSCode
+.vscode/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+storage/
+data/uploads/
+rag.log
