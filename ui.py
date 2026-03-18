@@ -15,13 +15,6 @@ st.set_page_config(page_title="Local RAG", layout="wide")
 st.title("📚 Local RAG App")
 st.caption("Upload PDFs → Ask questions → Get grounded answers with sources")
 
-if st.button("Test Backend"):
-    try:
-        r = requests.get(f"{API_BASE_URL}/", timeout=10)
-        st.write(r.status_code, r.text)
-    except Exception as e:
-        st.error(f"Backend test failed: {e}")
-
 # ---------------------------
 # Sidebar: Upload
 # ---------------------------
