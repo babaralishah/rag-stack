@@ -7,7 +7,7 @@ from pydantic import BaseModel
 
 import json
 
-from src.config import UPLOADS_DIR, STORE_DIR, EMBED_MODEL, EMBED_DIM, OLLAMA_MODEL, TOP_K, MIN_SCORE
+from src.config import UPLOADS_DIR, STORE_DIR, EMBED_MODEL, EMBED_DIM, TOP_K, MIN_SCORE
 from src.utils import file_sha256
 from src.document_loader import load_pdf
 from src.chunker import chunk_text
@@ -158,8 +158,7 @@ def query(req: QueryRequest):
     out = rag_answer(
         question=q,
         retrieved=retrieved,
-        min_score=MIN_SCORE,
-        model=OLLAMA_MODEL,
+        min_score=MIN_SCORE
     )
 
     return QueryResponse(answer=out["answer"], sources=out["sources"])
