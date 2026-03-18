@@ -1,17 +1,11 @@
 import logging
-import requests
-from typing import List, Dict, Any, Tuple
-from src.config import MAX_CHARS, MIN_SIMILARITY, OLLAMA_BASE_URL, API_BASE_URL, OLLAMA_MODEL
+from typing import List, Dict, Any
+from src.config import MAX_CHARS
+from src.hosted_llm import generate_answer
 
 logger = logging.getLogger(__name__)
 
-OLLAMA_URL = OLLAMA_BASE_URL + "/api/generate"
-DEFAULT_MODEL = OLLAMA_MODEL
-
 def build_context(results: List[Dict[str, Any]], max_chars: int = MAX_CHARS) -> str:
-    """
-    Turn retrieved chunks into a compact context block.
-    """
     parts = []
     total = 0
     for r in results:
@@ -25,30 +19,11 @@ def build_context(results: List[Dict[str, Any]], max_chars: int = MAX_CHARS) -> 
         total += len(block)
     return "\n".join(parts).strip()
 
-def call_ollama(prompt: str, model: str = DEFAULT_MODEL, temperature: float = 0.1) -> str:
-    payload = {"model": model, "prompt": prompt, "stream": False, "temperature": temperature}
-    try:
-        r = requests.post(OLLAMA_URL, json=payload, timeout=300)
-        r.raise_for_status()
-        data = r.json()
-        return (data.get("response") or "").strip()
-    except Exception as e:
-        logger.exception("Ollama call failed: %s", e)
-        raise
-
 def rag_answer(
     question: str,
     retrieved: List[Dict[str, Any]],
     min_score: float = 0.35,
-    model: str = DEFAULT_MODEL,
 ) -> Dict[str, Any]:
-    """
-    Guardrail:
-      - If top similarity score is too low => "I don't know based on the documents."
-    Returns:
-      - answer
-      - sources: file + page + snippet + score
-    """
     if not retrieved:
         return {
             "answer": "I don’t know based on the documents.",
@@ -74,20 +49,21 @@ def rag_answer(
 
     prompt = f"""You are a careful assistant.
 
-    Use ONLY the provided context to answer the question.
-    If the answer is clearly supported by the context, answer directly and briefly.
-    If the answer is not present in the context, say:
-    "I don't know based on the documents."
+Use ONLY the provided context to answer the question.
+If the answer is clearly supported by the context, answer directly and briefly.
+If the answer is not present in the context, say:
+"I don't know based on the documents."
 
-    CONTEXT:
-    {context}
+CONTEXT:
+{context}
 
-    QUESTION:
-    {question}
+QUESTION:
+{question}
 
-    ANSWER:
-    """
-    answer = call_ollama(prompt, model=model, temperature=0.1)
+ANSWER:
+"""
+
+    answer = generate_answer(prompt)
 
     seen = set()
     sources = []
