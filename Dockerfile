@@ -1,22 +1,19 @@
-FROM python:3.11-slim
+FROM python:3.10-slim
 
 WORKDIR /app
 
-# System deps (lightweight)
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential curl \
-    && rm -rf /var/lib/apt/lists/*
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+ENV PIP_NO_CACHE_DIR=1
+ENV API_BASE_URL=http://127.0.0.1:8000
 
-# Install python deps
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --upgrade pip && pip install -r requirements.txt
 
-# Copy project
 COPY . .
 
-# Expose API
-EXPOSE 8000
+RUN chmod +x /app/start.sh
 
-# Run FastAPI
-# CMD ["uvicorn", "src.api:app", "--host", "0.0.0.0", "--port", "8000"]
-CMD ["uvicorn", "src.api:app", "--host", "0.0.0.0", "--port", "7860"]
+EXPOSE 7860
+
+CMD ["/app/start.sh"]

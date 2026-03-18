@@ -3,8 +3,8 @@ title: RAG LLM App
 emoji: 🤖
 colorFrom: blue
 colorTo: green
-sdk: streamlit
-app_file: ui.py
+sdk: docker
+app_port: 7860
 ---
 
 ## 🎬 Demo
