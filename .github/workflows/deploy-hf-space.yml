@@ -1,0 +1,32 @@
+name: Deploy hf-deploy branch to Hugging Face Space
+
+on:
+  push:
+    branches:
+      - hf-deploy
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-hf-space
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout hf-deploy branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          lfs: true
+
+      - name: Push hf-deploy to Hugging Face Space
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          # Push the checked-out commit to the Space repo's main branch
+          git push --force https://babaralishah:${HF_TOKEN}@huggingface.co/spaces/babaralishah/rag-llm-app HEAD:main
