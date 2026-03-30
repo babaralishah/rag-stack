@@ -1,14 +1,13 @@
 import os
 
 from src.config import TOP_K
-# API_BASE_URL = os.getenv("API_BASE_URL", "http://127.0.0.1:8000")
-API_BASE_URL = os.getenv("API_BASE_URL", "http://0.0.0.0:8000")
+API_BASE_URL = os.getenv("API_BASE_URL", "http://127.0.0.1:8000")
+# API_BASE_URL = os.getenv("API_BASE_URL", "http://0.0.0.0:8000")
 
 import streamlit as st
 import requests
 from typing import Dict, Any
 
-# API_BASE = "http://127.0.0.1:8000"
 
 st.set_page_config(page_title="Local RAG", layout="wide")
 

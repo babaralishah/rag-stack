@@ -1,18 +1,17 @@
 # ========================
-# Production Dockerfile for Hugging Face Spaces (CPU-optimized)
-# Single container: FastAPI (background) + Streamlit on port 7860
+# Production Dockerfile - Hugging Face Spaces (CPU only)
 # ========================
 
 FROM python:3.11-slim
 
 WORKDIR /app
 
-# Minimal system dependencies
+# Minimal system deps
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Production environment variables
+# Environment variables (HF requires /tmp for everything writable)
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
@@ -20,22 +19,24 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     HF_HOME=/tmp/hf \
     TRANSFORMERS_CACHE=/tmp/hf \
     HF_DATASETS_CACHE=/tmp/hf \
-    TORCH_CPU_ONLY=1
+    SENTENCE_TRANSFORMERS_HOME=/tmp/hf
 
-# Install dependencies with CPU-only torch (critical for speed & size)
+# Install CPU-only torch first (greatly reduces build time & size)
 COPY requirements.txt .
-RUN pip install --no-cache-dir torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu && \
+RUN pip install --no-cache-dir \
+    torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu && \
     pip install --no-cache-dir -r requirements.txt
 
-# Copy application code
 COPY . .
 
-# Make start script executable
 RUN chmod +x /app/start.sh
+
+# Run as non-root (HF best practice)
+RUN useradd -m -u 1000 appuser && chown -R appuser /app
+USER appuser
 
 EXPOSE 7860
 
-# Use the start script
 CMD ["/app/start.sh"]
 
 # FROM python:3.11-slim
