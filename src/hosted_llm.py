@@ -11,7 +11,7 @@ def generate_answer(prompt: str) -> str:
     try:
         client = get_groq_client()
         response = client.chat.completions.create(
-            model="llama-3.1-8b-instant",   # or "llama-3.3-70b-versatile" if you upgrade HF hardware
+            model="llama-3.1-8b-instant",
             messages=[{"role": "user", "content": prompt}],
             temperature=0.7,
             max_tokens=1024,
