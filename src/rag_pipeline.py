@@ -49,10 +49,12 @@ def rag_answer(
 
     prompt = f"""You are a careful assistant.
 
-Use ONLY the provided context to answer the question.
-If the answer is clearly supported by the context, answer directly and briefly.
-If the answer is not present in the context, say:
-"I don't know based on the documents."
+Use the provided context to answer the question.
+If the answer is supported by the context, answer directly and a little explained.
+I don't have sufficient information in the uploaded documents to answer this question accurately."
+
+  After that, you can optionally add: 
+  "However, based on my general knowledge, ..." and give your best general answer.
 
 CONTEXT:
 {context}

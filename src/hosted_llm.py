@@ -11,7 +11,8 @@ def generate_answer(prompt: str) -> str:
     try:
         client = get_groq_client()
         response = client.chat.completions.create(
-            model="llama-3.1-8b-instant",
+            # model="llama-3.1-8b-instant",
+            model="llama-3.3-70b-versatile",
             messages=[{"role": "user", "content": prompt}],
             temperature=0.7,
             max_tokens=1024,
@@ -19,24 +20,3 @@ def generate_answer(prompt: str) -> str:
         return response.choices[0].message.content.strip()
     except Exception as e:
         return f"LLM Error: {str(e)}"
-
-# import os
-# from groq import Groq
-
-# GROQ_API_KEY = os.getenv("GROQ_API_KEY")
-
-# client = Groq(api_key=GROQ_API_KEY)
-
-# def generate_answer(prompt: str) -> str:
-#     try:
-#         response = client.chat.completions.create(
-#             model="llama-3.1-8b-instant",
-#             messages=[
-#                 {"role": "user", "content": prompt}
-#             ],
-#         )
-
-#         return response.choices[0].message.content.strip()
-
-#     except Exception as e:
-#         return f"Error generating answer: {str(e)}"
