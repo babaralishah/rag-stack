@@ -57,6 +57,7 @@ jobs:
   # ==================== CD PART (Deployment to Hugging Face) ====================
   deploy-to-huggingface:
     needs: ci-build
+    if: github.ref == 'refs/heads/ci-cd'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Repository
@@ -67,7 +68,7 @@ jobs:
         with:
           personal_token: ${{ secrets.HF_TOKEN }}
           external_repository: ${{ secrets.HF_SPACE_ID }}
-          publish_branch: ci-cd
+          publish_branch: main
           publish_dir: .
           force_orphan: true
-          commit_message: "Auto-deploy from GitHub CI/CD Pipeline"
+          commit_message: "Auto-deploy from ci-cd branch"
