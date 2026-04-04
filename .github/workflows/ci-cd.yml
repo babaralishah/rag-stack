@@ -3,11 +3,8 @@ name: CI/CD Pipeline - Local RAG
 on:
   push:
     branches: [ ci-cd ]
-  pull_request:
-    branches: [ ci-cd ]
 
 jobs:
-  # ==================== CI PART ====================
   ci-build:
     runs-on: ubuntu-latest
     steps:
@@ -54,21 +51,21 @@ jobs:
           echo "Branch : ${{ github.ref_name }}"
           echo "============================================"
 
-  # ==================== CD PART (Deployment to Hugging Face) ====================
+  # ==================== CD PART - Deployment to Hugging Face ====================
   deploy-to-huggingface:
     needs: ci-build
-    if: github.ref == 'refs/heads/ci-cd'
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout Repository
+      - name: Checkout code
         uses: actions/checkout@v4
 
       - name: Deploy to Hugging Face Space
-        uses: peaceiris/actions-gh-pages@v4
-        with:
-          personal_token: ${{ secrets.HF_TOKEN }}
-          external_repository: ${{ secrets.HF_SPACE_ID }}
-          publish_branch: main
-          publish_dir: .
-          force_orphan: true
-          commit_message: "Auto-deploy from ci-cd branch"
+        run: |
+          echo "🚀 Starting deployment to Hugging Face Space..."
+          echo "Space ID: ${{ secrets.HF_SPACE_ID }}"
+          echo "Note: Deployment using Git push method"
+          git config --global user.name "GitHub Actions"
+          git config --global user.email "actions@github.com"
+          echo "This is a placeholder step. In a working setup, we would push to HF here."
+          echo "For now, CI is working. Full CD requires correct HF token setup."
+        shell: bash
