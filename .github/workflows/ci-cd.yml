@@ -1,0 +1,58 @@
+name: CI/CD Pipeline - Local RAG
+
+on:
+  push:
+    branches: [ ci-cd, main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Production Docker Image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          push: false
+          tags: local-rag:test
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build UI Docker Image (for local dev)
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile.ui
+          push: false
+          tags: local-rag-ui:test
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Validate important files exist
+        run: |
+          echo "? Checking required files..."
+          [ -f "Dockerfile" ] && echo "? Dockerfile found" || (echo "? Dockerfile missing!" && exit 1)
+          [ -f "Dockerfile.ui" ] && echo "? Dockerfile.ui found" || (echo "? Dockerfile.ui missing!" && exit 1)
+          [ -f "requirements.txt" ] && echo "? requirements.txt found" || (echo "? requirements.txt missing!" && exit 1)
+          [ -f "ui.py" ] && echo "? ui.py found" || (echo "? ui.py missing!" && exit 1)
+
+      - name: Check Docker Build Success
+        run: echo "?? Docker images built successfully!"
+
+      - name: Summary
+        run: |
+          echo "============================================"
+          echo "CI Pipeline completed successfully!"
+          echo "Project: Local RAG App"
+          echo "Tested: Production Dockerfile + UI Dockerfile"
+          echo "Branch: ${{ github.ref }}"
+          echo "============================================"
