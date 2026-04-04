@@ -2,34 +2,31 @@ name: CI Pipeline - Local RAG
 
 on:
   push:
-    branches: [ ci-cd ]
+    branches: [ main, ci-cd ]
   pull_request:
     branches: [ main ]
 
 jobs:
-  build:
+  docker-build:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout Repository
+      - name: Checkout Code
         uses: actions/checkout@v4
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Build Production Docker Image
+      - name: Build Production Image
         uses: docker/build-push-action@v6
         with:
           context: .
           file: ./Dockerfile
           push: false
-          tags: local-rag:prod
+          tags: local-rag:production
           cache-from: type=gha
           cache-to: type=gha,mode=max
-          build-args: |
-            BUILDKIT_INLINE_CACHE=1
 
-      - name: Build UI Docker Image
+      - name: Build UI Image
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -41,20 +38,20 @@ jobs:
 
       - name: Validate Project Files
         run: |
-          echo "🔍 Validating essential files..."
-          [ -f "Dockerfile" ] && echo "✅ Dockerfile" || (echo "❌ Dockerfile missing" && exit 1)
-          [ -f "Dockerfile.ui" ] && echo "✅ Dockerfile.ui" || (echo "❌ Dockerfile.ui missing" && exit 1)
-          [ -f "requirements.txt" ] && echo "✅ requirements.txt" || (echo "❌ requirements.txt missing" && exit 1)
-          [ -f "start.sh" ] && echo "✅ start.sh" || (echo "❌ start.sh missing" && exit 1)
-          [ -f "ui.py" ] && echo "✅ ui.py" || (echo "❌ ui.py missing" && exit 1)
-          echo "✅ All critical files are present!"
+          echo "🔍 Checking essential files..."
+          [ -f "Dockerfile" ]     && echo "✅ Dockerfile found"          || exit 1
+          [ -f "Dockerfile.ui" ]  && echo "✅ Dockerfile.ui found"       || exit 1
+          [ -f "requirements.txt" ] && echo "✅ requirements.txt found" || exit 1
+          [ -f "start.sh" ]       && echo "✅ start.sh found"            || exit 1
+          [ -f "ui.py" ]          && echo "✅ ui.py found"               || exit 1
+          echo "🎉 All required files are present!"
 
-      - name: Summary
+      - name: Final Summary
         run: |
           echo "============================================"
-          echo "🎉 CI Pipeline Completed Successfully!"
-          echo "Project   : Local RAG App"
-          echo "Branch    : ${{ github.ref }}"
-          echo "Triggered : ${{ github.event_name }}"
-          echo "Status    : Success"
+          echo "✅ CI Pipeline Completed Successfully!"
+          echo "Project     : Local RAG App"
+          echo "Branch      : ${{ github.ref_name }}"
+          echo "Event       : ${{ github.event_name }}"
+          echo "Duration    : ${{ job.status }}"
           echo "============================================"
