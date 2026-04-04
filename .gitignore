@@ -27,3 +27,9 @@ Thumbs.db
 storage/
 data/uploads/
 rag.log
+
+# Extras
+.DEBUGGING_GUIDE.md
+.INTERVIEW_SUMMARY.md
+.PROJECT_ARCHITECTURE.md
+.PROMPT.md
