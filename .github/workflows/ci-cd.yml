@@ -61,8 +61,9 @@ jobs:
       - name: Deploy to Hugging Face Space
         run: |
           echo "🚀 Starting deployment to Hugging Face Space from ci-cd branch..."
-          echo "Space ID: ${{ secrets.HF_SPACE_ID }}"
-          echo "Note: This is a placeholder step."
-          echo "In a real working setup, we would push the code to your HF Space here."
-          echo "For now, the CI part is working perfectly."
+          echo "Space ID : ${{ secrets.HF_SPACE_ID }}"
+          echo ""
+          echo "Note: Real deployment is not active yet."
+          echo "In a complete setup, we would push the code here."
+          echo "For learning, the CI part is fully working."
         shell: bash
