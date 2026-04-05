@@ -51,7 +51,6 @@ jobs:
           echo "Branch : ${{ github.ref_name }}"
           echo "============================================"
 
-  # ==================== CD PART - Deployment to Hugging Face ====================
   deploy-to-huggingface:
     needs: ci-build
     runs-on: ubuntu-latest
@@ -61,11 +60,9 @@ jobs:
 
       - name: Deploy to Hugging Face Space
         run: |
-          echo "🚀 Starting deployment to Hugging Face Space..."
+          echo "🚀 Starting deployment to Hugging Face Space from ci-cd branch..."
           echo "Space ID: ${{ secrets.HF_SPACE_ID }}"
-          echo "Note: Deployment using Git push method"
-          git config --global user.name "GitHub Actions"
-          git config --global user.email "actions@github.com"
-          echo "This is a placeholder step. In a working setup, we would push to HF here."
-          echo "For now, CI is working. Full CD requires correct HF token setup."
+          echo "Note: This is a placeholder step."
+          echo "In a real working setup, we would push the code to your HF Space here."
+          echo "For now, the CI part is working perfectly."
         shell: bash
