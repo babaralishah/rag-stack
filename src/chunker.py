@@ -13,8 +13,8 @@ class Chunk:
 
 def chunk_text(
     pages: List[Dict[str, Any]],
-    chunk_size: int = 800,
-    chunk_overlap: int = 150
+    chunk_size: int,
+    chunk_overlap: int
 ) -> List[Chunk]:
     """
 Character-based chunker with proper overlap across pages.
