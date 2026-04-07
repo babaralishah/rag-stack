@@ -1,8 +1,3 @@
-# Splits text into chunks of a specified size with optional overlap. This is a simple character-based chunker that guarantees forward progress and won't loop forever. 
-# Each chunk retains metadata from the original page for later reference.
-
-
-
 from dataclasses import dataclass
 from typing import List, Dict, Any
 import logging
@@ -22,16 +17,16 @@ def chunk_text(
     chunk_overlap: int = 150
 ) -> List[Chunk]:
     """
-    Simple, safe character-based chunking.
-    - chunk_size: characters per chunk
-    - chunk_overlap: characters of overlap between chunks
-
-    This version guarantees forward progress and will not loop forever.
+Character-based chunker with proper overlap across pages.
+    - Guarantees forward progress
+    - Overlaps between pages (important for continuity)
+    - Preserves original page metadata
     """
     if chunk_overlap >= chunk_size:
-        raise ValueError("chunk_overlap must be < chunk_size")
+        raise ValueError("chunk_overlap must be smaller than chunk_size")
 
     chunks: List[Chunk] = []
+    previous_overlap_text = ""   # Carry over text from previous page for overlap
 
     for page in pages:
         text = (page.get("text") or "").strip()
@@ -40,21 +35,33 @@ def chunk_text(
         if not text:
             continue
 
-        n = len(text)
+        # Add overlap from previous page at the beginning
+        full_text = previous_overlap_text + " " + text if previous_overlap_text else text
+
+        n = len(full_text)
         start = 0
 
         while start < n:
             end = min(start + chunk_size, n)
-            chunk = text[start:end].strip()
+            chunk_text = full_text[start:end].strip()
 
-            if chunk:
-                chunks.append(Chunk(text=chunk, metadata=dict(meta)))
+            if chunk_text:
+                # Create metadata for this chunk
+                chunk_meta = dict(meta)
+                chunk_meta["chunk_start"] = start
+                chunk_meta["chunk_end"] = end
+                chunk_meta["chunk_length"] = len(chunk_text)
+
+                chunks.append(Chunk(text=chunk_text, metadata=chunk_meta))
 
             if end == n:
-                break  # reached end of this page text
+                break
 
-            # guaranteed forward progress
+            # Move forward with overlap
             start = max(0, end - chunk_overlap)
 
-    logger.info("Created %d chunks", len(chunks))
+        # Save the last 'chunk_overlap' characters for the next page
+        previous_overlap_text = full_text[max(0, n - chunk_overlap):]
+
+    logger.info(f"Created {len(chunks)} chunks with overlap={chunk_overlap}")
     return chunks
