@@ -7,7 +7,7 @@ from pydantic import BaseModel
 
 import json
 
-from src.config import UPLOADS_DIR, STORE_DIR, EMBED_MODEL, EMBED_DIM, TOP_K, MIN_SCORE
+from src.config import UPLOADS_DIR, STORE_DIR, EMBED_MODEL, EMBED_DIM, TOP_K, MIN_SCORE, CHUNK_SIZE, CHUNK_OVERLAP
 from src.utils import file_sha256
 from src.document_loader import load_pdf
 from src.chunker import chunk_text
@@ -123,7 +123,7 @@ async def upload_pdf(file: UploadFile = File(...)):
             )
 
         page_dicts = [{"text": p.text, "metadata": p.metadata} for p in pages]
-        chunks = chunk_text(page_dicts, chunk_size=800, chunk_overlap=150)
+        chunks = chunk_text(page_dicts, chunk_size=CHUNK_SIZE, chunk_overlap=CHUNK_OVERLAP)
 
         texts = [c.text for c in chunks]
         metas = []

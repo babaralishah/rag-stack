@@ -26,6 +26,7 @@ services:
       --reload-dir /app/src
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    restart: unless-stopped   # Good practice
 
   ui:
     build:
@@ -46,3 +47,4 @@ services:
       --server.port 8501
     depends_on:
       - api
+    restart: unless-stopped
