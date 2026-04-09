@@ -1,82 +1,69 @@
-import os
-
-from src.config import TOP_K
-API_BASE_URL = os.getenv("API_BASE_URL", "http://127.0.0.1:8000")
-# API_BASE_URL = os.getenv("API_BASE_URL", "http://0.0.0.0:8000")
-
-import streamlit as st
+﻿import streamlit as st
 import requests
-from typing import Dict, Any
+import os
+from dotenv import load_dotenv
 
+load_dotenv()
 
-st.set_page_config(page_title="Local RAG", layout="wide")
+st.set_page_config(page_title="LangChain RAG", page_icon="📚", layout="wide")
+st.title("📚 LangChain RAG App")
+st.markdown("### Ask questions about your uploaded documents")
 
-st.title("📚 Local RAG App")
-st.caption("Upload PDFs → Ask questions → Get grounded answers with sources")
+# Sidebar
+st.sidebar.header("Settings")
+API_BASE_URL = st.sidebar.text_input("API Base URL", value="http://127.0.0.1:8000")
 
-# ---------------------------
-# Sidebar: Upload
-# ---------------------------
-st.sidebar.header("Upload PDF")
+# Initialize session state
+if "messages" not in st.session_state:
+    st.session_state.messages = []
 
-uploaded_file = st.sidebar.file_uploader("Choose a PDF", type=["pdf"])
+# File uploader
+uploaded_file = st.file_uploader("Upload a PDF document", type=["pdf"])
 
 if uploaded_file is not None:
-    with st.sidebar:
+    if st.button("Upload and Index Document"):
         with st.spinner("Uploading and indexing..."):
+            files = {"file": uploaded_file.getvalue()}
             try:
-                files = {"file": (uploaded_file.name, uploaded_file.getvalue(), "application/pdf")}
-                r = requests.post(f"{API_BASE_URL}/upload", files=files, timeout=120)
-                r.raise_for_status()
-                st.success(f"Upload result: {r.json()}")
+                response = requests.post(f"{API_BASE_URL}/upload", files={"file": (uploaded_file.name, uploaded_file.getvalue())})
+                if response.status_code == 200:
+                    st.success(response.json().get("message", "Document indexed successfully!"))
+                else:
+                    st.error(f"Upload failed: {response.text}")
             except Exception as e:
-                st.error(f"Upload failed: {e}")
+                st.error(f"Error uploading file: {e}")
 
-# ---------------------------
-# Main: Chat
-# ---------------------------
-if "chat_history" not in st.session_state:
-    st.session_state.chat_history = []
+# Chat interface
+st.subheader("Ask a question")
 
-question = st.text_input("Ask a question about your documents:")
+for message in st.session_state.messages:
+    with st.chat_message(message["role"]):
+        st.markdown(message["content"])
 
-if st.button("Ask"):
-    if not question.strip():
-        st.warning("Please enter a question.")
-    else:
+if prompt := st.chat_input("What would you like to know?"):
+    st.session_state.messages.append({"role": "user", "content": prompt})
+    with st.chat_message("user"):
+        st.markdown(prompt)
+
+    with st.chat_message("assistant"):
         with st.spinner("Thinking..."):
+            answer = "Sorry, I couldn't get a response."   # ← safe default
             try:
-                payload = {"question": question, "top_k": TOP_K}
-                r = requests.post(f"{API_BASE_URL}/query", json=payload, timeout=120)
-                r.raise_for_status()
-                data: Dict[str, Any] = r.json()
-
-                st.session_state.chat_history.append(
-                    {
-                        "question": question,
-                        "answer": data.get("answer"),
-                        "sources": data.get("sources", []),
-                    }
-                )
+                response = requests.post(f"{API_BASE_URL}/query", json={"question": prompt})
+                if response.status_code == 200:
+                    result = response.json()
+                    answer = result.get("answer", "Sorry, I couldn't generate an answer.")
+                    sources = result.get("sources", [])
+                    
+                    st.markdown(answer)
+                    
+                    if sources:
+                        st.markdown("**Sources:**")
+                        for i, src in enumerate(sources, 1):
+                            st.caption(f"{i}. {src.get('file')} (page {src.get('page', '?')})")
+                else:
+                    st.error(f"Error: {response.text}")
             except Exception as e:
-                st.error(f"Query failed: {e}")
+                st.error(f"Failed to get response: {e}")
 
-# ---------------------------
-# Render Chat History
-# ---------------------------
-for entry in reversed(st.session_state.chat_history):
-    st.markdown("---")
-    st.markdown(f"### ❓ Question\n{entry['question']}")
-    st.markdown(f"### 🤖 Answer\n{entry['answer']}")
-
-    if entry["sources"]:
-        with st.expander("📖 Sources"):
-            for i, s in enumerate(entry["sources"], 1):
-                st.markdown(
-                    f"""
-**[{i}] {s.get('file')} p.{s.get('page')}**  
-Score: {s.get('score'):.3f}
-
-> {s.get('snippet')}
-"""
-                )
+    st.session_state.messages.append({"role": "assistant", "content": answer})
