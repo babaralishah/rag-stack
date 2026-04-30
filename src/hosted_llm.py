@@ -14,8 +14,8 @@ def generate_answer(prompt: str) -> str:
             # model="llama-3.1-8b-instant",
             model="llama-3.3-70b-versatile",
             messages=[{"role": "user", "content": prompt}],
-            temperature=0.7,
-            max_tokens=1024,
+            temperature=0.7, # Adjust for creativity vs accuracy 
+            max_tokens=1024, # Limit response length (adjust as needed)
         )
         return response.choices[0].message.content.strip()
     except Exception as e:
