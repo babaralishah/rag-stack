@@ -22,9 +22,10 @@ EMBED_DIM = 384
 MIN_SIMILARITY = 0.30
 
 # Reranker Settings
-RERANKER_MODEL = "cross-encoder/ms-marco-MiniLM-L-6-v2"
-RERANKER_TOP_K = 10          # How many chunks to retrieve initially
-RERANKER_KEEP_TOP_K = 5      # How many best chunks to keep after reranking
+# RERANKER_MODEL = "cross-encoder/ms-marco-MiniLM-L-6-v2"
+RERANKER_MODEL = "BAAI/bge-reranker-base"
+RERANKER_TOP_K = 12         # How many chunks to retrieve initially
+RERANKER_KEEP_TOP_K = 6      # How many best chunks to keep after reranking
 USE_RERANKER = True          # Easy toggle
 
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
