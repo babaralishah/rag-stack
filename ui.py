@@ -91,30 +91,30 @@ for message in st.session_state.chat_history:
         with st.chat_message("assistant"):
             st.markdown(message["content"])
 
-            # Sources Section - Now with Reranker Support
+            # Sources Section
             if message.get("sources"):
                 with st.expander("📚 View Sources & Relevance", expanded=False):
                     for i, src in enumerate(message["sources"], 1):
                         orig_score = src.get('score', 0.0)
                         rerank_score = src.get('rerank_score')
                         
-                        # Decide which score to highlight
                         display_score = rerank_score if rerank_score is not None else orig_score
-                        score_label = "Rerank Score" if rerank_score is not None else "Relevance"
+                        score_label = "Rerank Score" if rerank_score is not None else "Embedding Score"
                         
-                        # Color coding based on rerank score (better signal)
+                        # Color coding adjusted for small reranker scores
                         if rerank_score is not None:
-                            score_color = "🟢" if rerank_score > 0.5 else "🟡" if rerank_score > 0.0 else "🔴"
+                            score_color = "🟢" if rerank_score > 0.0 else "🟡" if rerank_score > -2.0 else "🔴"
                         else:
-                            score_color = "🟢" if orig_score > 0.45 else "🟡" if orig_score > 0.35 else "🔴"
+                            score_color = "🟢" if orig_score > 0.4 else "🟡" if orig_score > 0.3 else "🔴"
                         
                         st.markdown(f"""
 **{score_color} Source {i}** — **{src.get('file', 'Unknown')}** (Page {src.get('page', '?')})  
-**{score_label}:** `{display_score:.3f}`  
+**{score_label}:** `{display_score:.4f}`
                         """)
                         
-                        if rerank_score is not None and orig_score is not None:
-                            st.caption(f"Original score: `{orig_score:.3f}`")
+                        if rerank_score is not None:
+                            st.caption(f"Original embedding score: `{orig_score:.3f}`")
                         
                         st.markdown(f"> {src.get('snippet', '')}")
-                        st.divider()
+                        if i < len(message["sources"]):
+                            st.divider()
