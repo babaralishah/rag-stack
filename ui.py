@@ -101,9 +101,8 @@ for message in st.session_state.chat_history:
                         display_score = rerank_score if rerank_score is not None else orig_score
                         score_label = "Rerank Score" if rerank_score is not None else "Embedding Score"
                         
-                        # Color coding adjusted for small reranker scores
                         if rerank_score is not None:
-                            score_color = "🟢" if rerank_score > 0.0 else "🟡" if rerank_score > -2.0 else "🔴"
+                            score_color = "🟢" if rerank_score > 0.001 else "🟡" if rerank_score > 0.0 else "🔴"
                         else:
                             score_color = "🟢" if orig_score > 0.4 else "🟡" if orig_score > 0.3 else "🔴"
                         
