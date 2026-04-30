@@ -2,6 +2,9 @@
 from pathlib import Path
 from typing import Optional, List, Dict, Any
 
+from src.config import RERANKER_TOP_K, USE_RERANKER
+    
+
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from pydantic import BaseModel
 
@@ -159,12 +162,25 @@ def query(req: QueryRequest):
 
     store = load_or_create_store(dim=EMBED_DIM)
     qv = emb.embed_query(q)
-    retrieved = store.search(qv, top_k=req.top_k)
+    
+    
+    retrieve_k = RERANKER_TOP_K if USE_RERANKER else req.top_k
+    
+    retrieved = store.search(qv, top_k=retrieve_k)
 
     out = rag_answer(
         question=q,
         retrieved=retrieved,
-        min_score=MIN_SCORE
+        min_score=MIN_SCORE,
+        use_reranker=USE_RERANKER
     )
+    
+    # retrieved = store.search(qv, top_k=req.top_k)
+
+    # out = rag_answer(
+    #     question=q,
+    #     retrieved=retrieved,
+    #     min_score=MIN_SCORE
+    # )
 
     return QueryResponse(answer=out["answer"], sources=out["sources"])

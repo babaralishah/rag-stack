@@ -1,7 +1,8 @@
 import logging
 from typing import List, Dict, Any
-from src.config import MAX_CHARS
+from src.config import MAX_CHARS, USE_RERANKER, RERANKER_KEEP_TOP_K
 from src.hosted_llm import generate_answer
+from src.reranker import get_reranker   # ← New import
 
 logger = logging.getLogger(__name__)
 
@@ -19,12 +20,29 @@ def build_context(results: List[Dict[str, Any]], max_chars: int = MAX_CHARS) -> 
         total += len(block)
     return "\n".join(parts).strip()
 
+
 def rag_answer(
     question: str,
     retrieved: List[Dict[str, Any]],
     min_score: float = 0.35,
+    use_reranker: bool = USE_RERANKER,      # ← New parameter with default
 ) -> Dict[str, Any]:
     
+    # === Re-ranking Step ===
+    if use_reranker and retrieved:
+        try:
+            reranker = get_reranker()
+            logger.info(f"Re-ranking {len(retrieved)} retrieved chunks")
+            retrieved = reranker.rerank(
+                query=question, 
+                candidates=retrieved, 
+                top_k=RERANKER_KEEP_TOP_K
+            )
+            logger.info(f"After reranking, keeping top {len(retrieved)} chunks")
+        except Exception as e:
+            logger.warning(f"Reranking failed: {e}. Falling back to original retrieval.")
+            # Continue with original retrieved chunks if reranker fails
+
     # Case 1: No results retrieved at all
     if not retrieved:
         general_answer = generate_answer(f"Answer this question concisely using your general knowledge: {question}")
@@ -34,9 +52,10 @@ def rag_answer(
             "sources": [],
         }
 
-    # Case 2 & 3 Combined: Context exists → Let the LLM decide
+    # Case 2: Context exists
     context = build_context(retrieved)
-    top_score = retrieved[0]["score"]
+    top_score = retrieved[0].get("score", 0.0)          # original embedding score
+    top_rerank_score = retrieved[0].get("rerank_score", None)
 
     prompt = f"""You are a careful, honest, and helpful assistant.
 
@@ -60,18 +79,20 @@ ANSWER:"""
 
     answer = generate_answer(prompt)
 
-    # Prepare sources (show top 3)
+    # Prepare sources (show top 3) - Improved for reranking
     seen = set()
     sources = []
-    for r in retrieved[:3]:
+    for r in retrieved[:3]:                    # Already reranked, so top ones first
         file = r["metadata"].get("source_file", "unknown")
         page = r["metadata"].get("page", "?")
         key = (file, page)
         if key in seen:
             continue
         seen.add(key)
+        
         sources.append({
-            "score": round(r["score"], 3),
+            "score": round(r.get("score", 0.0), 3),           # original embedding score
+            "rerank_score": round(r.get("rerank_score", 0.0), 3) if r.get("rerank_score") is not None else None,
             "file": file,
             "page": page,
             "snippet": r["text"][:280].replace("\n", " "),

@@ -91,17 +91,30 @@ for message in st.session_state.chat_history:
         with st.chat_message("assistant"):
             st.markdown(message["content"])
 
-            # Sources Section (Beautiful & Collapsible)
+            # Sources Section - Now with Reranker Support
             if message.get("sources"):
                 with st.expander("📚 View Sources & Relevance", expanded=False):
                     for i, src in enumerate(message["sources"], 1):
-                        score = src.get('score', 0)
-                        score_color = "🟢" if score > 0.45 else "🟡" if score > 0.35 else "🔴"
+                        orig_score = src.get('score', 0.0)
+                        rerank_score = src.get('rerank_score')
+                        
+                        # Decide which score to highlight
+                        display_score = rerank_score if rerank_score is not None else orig_score
+                        score_label = "Rerank Score" if rerank_score is not None else "Relevance"
+                        
+                        # Color coding based on rerank score (better signal)
+                        if rerank_score is not None:
+                            score_color = "🟢" if rerank_score > 0.5 else "🟡" if rerank_score > 0.0 else "🔴"
+                        else:
+                            score_color = "🟢" if orig_score > 0.45 else "🟡" if orig_score > 0.35 else "🔴"
                         
                         st.markdown(f"""
 **{score_color} Source {i}** — **{src.get('file', 'Unknown')}** (Page {src.get('page', '?')})  
-**Relevance:** `{score:.3f}`  
+**{score_label}:** `{display_score:.3f}`  
                         """)
+                        
+                        if rerank_score is not None and orig_score is not None:
+                            st.caption(f"Original score: `{orig_score:.3f}`")
                         
                         st.markdown(f"> {src.get('snippet', '')}")
                         st.divider()
