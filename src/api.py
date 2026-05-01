@@ -154,7 +154,8 @@ def query(req: QueryRequest):
         raise HTTPException(status_code=400, detail="Question cannot be empty.")
 
     emb = get_embedder()
-    # Ensure store exists (if no index yet, return safe message)
+    
+    # Ensure store exists
     index_path = STORE_DIR / "index.faiss"
     meta_path = STORE_DIR / "meta.jsonl"
     if not index_path.exists() or not meta_path.exists():
@@ -162,20 +163,8 @@ def query(req: QueryRequest):
 
     store = load_or_create_store(dim=EMBED_DIM)
     qv = emb.embed_query(q)
-    
-    
-    retrieve_k = RERANKER_TOP_K if USE_RERANKER else req.top_k
-    
-    retrieved = store.search(qv, top_k=retrieve_k)
 
-    out = rag_answer(
-        question=q,
-        retrieved=retrieved,
-        min_score=MIN_SCORE,
-        use_reranker=USE_RERANKER
-    )
-    
-    # Use higher top_k when reranker is enabled
+    # === FIXED: Properly import config variables ===
     from src.config import RERANKER_TOP_K, USE_RERANKER
 
     retrieve_k = RERANKER_TOP_K if USE_RERANKER else req.top_k
