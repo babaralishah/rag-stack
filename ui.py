@@ -91,29 +91,24 @@ for message in st.session_state.chat_history:
         with st.chat_message("assistant"):
             st.markdown(message["content"])
 
-            # Sources Section
+            # Sources Section - With Reranker + Fusion Support
             if message.get("sources"):
                 with st.expander("📚 View Sources & Relevance", expanded=False):
                     for i, src in enumerate(message["sources"], 1):
-                        orig_score = src.get('score', 0.0)
-                        rerank_score = src.get('rerank_score')
-                        
-                        display_score = rerank_score if rerank_score is not None else orig_score
-                        score_label = "Rerank Score" if rerank_score is not None else "Embedding Score"
-                        
-                        if rerank_score is not None:
-                            score_color = "🟢" if rerank_score > 0.001 else "🟡" if rerank_score > 0.0 else "🔴"
-                        else:
-                            score_color = "🟢" if orig_score > 0.4 else "🟡" if orig_score > 0.3 else "🔴"
-                        
+                        final_score = src.get("final_score", src.get("score", 0))
+                        rerank_score = src.get("rerank_score")
+                        orig_score = src.get("score", 0)
+
+                        color = "🟢" if final_score >= 0.5 else "🟡" if final_score >= 0.3 else "🔴"
+
                         st.markdown(f"""
-**{score_color} Source {i}** — **{src.get('file', 'Unknown')}** (Page {src.get('page', '?')})  
-**{score_label}:** `{display_score:.4f}`
+**{color} Source {i}** — **{src.get('file', 'Unknown')}** (Page {src.get('page', '?')})  
+**Final Score:** `{final_score:.4f}`
                         """)
-                        
+
                         if rerank_score is not None:
-                            st.caption(f"Original embedding score: `{orig_score:.3f}`")
-                        
+                            st.caption(f"Rerank: `{rerank_score:.3f}` | Original: `{orig_score:.3f}`")
+
                         st.markdown(f"> {src.get('snippet', '')}")
                         if i < len(message["sources"]):
                             st.divider()

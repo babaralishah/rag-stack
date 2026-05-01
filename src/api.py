@@ -175,12 +175,17 @@ def query(req: QueryRequest):
         use_reranker=USE_RERANKER
     )
     
-    # retrieved = store.search(qv, top_k=req.top_k)
+    # Use higher top_k when reranker is enabled
+    from src.config import RERANKER_TOP_K, USE_RERANKER
 
-    # out = rag_answer(
-    #     question=q,
-    #     retrieved=retrieved,
-    #     min_score=MIN_SCORE
-    # )
+    retrieve_k = RERANKER_TOP_K if USE_RERANKER else req.top_k
+
+    retrieved = store.search(qv, top_k=retrieve_k)
+
+    out = rag_answer(
+        question=q,
+        retrieved=retrieved,
+        min_score=MIN_SCORE
+    )
 
     return QueryResponse(answer=out["answer"], sources=out["sources"])

@@ -27,6 +27,7 @@ RERANKER_MODEL = "BAAI/bge-reranker-base"
 RERANKER_TOP_K = 12         # How many chunks to retrieve initially
 RERANKER_KEEP_TOP_K = 6      # How many best chunks to keep after reranking
 USE_RERANKER = True          # Easy toggle
+RERANKER_FUSION_ALPHA = 0.65     # 0.65 reranker + 0.35 embedding
 
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
 API_BASE_URL = os.getenv("API_BASE_URL", "http://127.0.0.1:8000")
