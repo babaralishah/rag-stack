@@ -165,18 +165,19 @@ def query(req: QueryRequest):
     store = load_or_create_store(dim=EMBED_DIM)
     qv = emb.embed_query(q)
 
-    # Use config as fallback, but respect user's choice from UI
+    # === Use the value sent from UI ===
     from src.config import RERANKER_TOP_K
 
     retrieve_k = RERANKER_TOP_K if req.use_reranker else req.top_k
 
     retrieved = store.search(qv, top_k=retrieve_k)
 
+    # Pass the user's choice to rag_answer
     out = rag_answer(
         question=q,
         retrieved=retrieved,
         min_score=MIN_SCORE,
-        use_reranker=req.use_reranker   # Pass user's choice to rag_answer
+        use_reranker=req.use_reranker
     )
 
     return QueryResponse(answer=out["answer"], sources=out["sources"])

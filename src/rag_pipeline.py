@@ -32,7 +32,7 @@ def rag_answer(
     if use_reranker and retrieved:
         try:
             reranker = get_reranker()
-            logger.info(f"Re-ranking {len(retrieved)} chunks")
+            logger.info(f"✅ Re-ranking ENABLED - processing {len(retrieved)} chunks")
             retrieved = reranker.rerank(
                 query=question,
                 candidates=retrieved,
@@ -41,6 +41,11 @@ def rag_answer(
             )
         except Exception as e:
             logger.error(f"Reranking failed: {e}")
+    else:
+        logger.info("Re-ranking DISABLED by user")
+        # Add final_score for consistency when reranker is off
+        for r in retrieved:
+            r["final_score"] = r.get("score", 0.0)
     
     # Case 1: No results
     if not retrieved:
