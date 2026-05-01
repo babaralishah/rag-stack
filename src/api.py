@@ -177,7 +177,8 @@ def query(req: QueryRequest):
         question=q,
         retrieved=retrieved,
         min_score=MIN_SCORE,
-        use_reranker=req.use_reranker
+        use_reranker=req.use_reranker,
+        final_top_k=req.top_k
     )
 
     return QueryResponse(answer=out["answer"], sources=out["sources"])

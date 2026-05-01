@@ -26,6 +26,7 @@ def rag_answer(
     retrieved: List[Dict[str, Any]],
     min_score: float = 0.35,
     use_reranker: bool = True,
+    final_top_k: int = 5,
 ) -> Dict[str, Any]:
     
     # === Reranking Step ===
@@ -37,7 +38,7 @@ def rag_answer(
             retrieved = reranker.rerank(
                 query=question,
                 candidates=retrieved,
-                top_k=RERANKER_KEEP_TOP_K,
+                top_k=final_top_k,
                 fusion_alpha=RERANKER_FUSION_ALPHA
             )
         except Exception as e:
@@ -51,6 +52,7 @@ def rag_answer(
         for r in retrieved:
             r["final_score"] = r.get("score", 0.0)
             r["rerank_score"] = 0.0   # Optional: to keep UI clean
+    retrieved = retrieved[:final_top_k]
     
     # Case 1: No results
     if not retrieved:
