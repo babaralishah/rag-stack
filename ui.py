@@ -112,22 +112,25 @@ for message in st.session_state.chat_history:
         with st.chat_message("assistant"):
             st.markdown(message["content"])
 
-            # Sources Section - With Reranker + Fusion Support
+            # Sources Section
             if message.get("sources"):
                 with st.expander("📚 View Sources & Relevance", expanded=False):
                     for i, src in enumerate(message["sources"], 1):
                         final_score = src.get("final_score", src.get("score", 0))
-                        rerank_score = src.get("rerank_score", 0)
+                        rerank_score = src.get("rerank_score")
                         orig_score = src.get("score", 0)
 
-                        color = "🟢" if final_score >= 0.6 else "🟡" if final_score >= 0.4 else "🔴"
+                        color = "🟢" if final_score >= 0.5 else "🟡" if final_score >= 0.3 else "🔴"
 
                         st.markdown(f"""
 **{color} Source {i}** — **{src.get('file', 'Unknown')}** (Page {src.get('page', '?')})  
 **Final Score:** `{final_score:.4f}`
                         """)
 
-                        st.caption(f"Rerank: `{rerank_score:.3f}` | Original: `{orig_score:.3f}`")
+                        if rerank_score is not None and rerank_score > 0:
+                            st.caption(f"Rerank: `{rerank_score:.3f}` | Original: `{orig_score:.3f}`")
+                        else:
+                            st.caption(f"Original embedding score: `{orig_score:.3f}`")
 
                         st.markdown(f"> {src.get('snippet', '')}")
                         if i < len(message["sources"]):

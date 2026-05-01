@@ -33,6 +33,7 @@ def rag_answer(
         try:
             reranker = get_reranker()
             logger.info(f"✅ Re-ranking ENABLED - processing {len(retrieved)} chunks")
+            
             retrieved = reranker.rerank(
                 query=question,
                 candidates=retrieved,
@@ -40,12 +41,16 @@ def rag_answer(
                 fusion_alpha=RERANKER_FUSION_ALPHA
             )
         except Exception as e:
-            logger.error(f"Reranking failed: {e}")
+            logger.error(f"Reranking failed: {e}. Falling back to original scores.")
+            # Fallback: use original embedding score as final
+            for r in retrieved:
+                r["final_score"] = r.get("score", 0.0)
     else:
-        logger.info("Re-ranking DISABLED by user")
-        # Add final_score for consistency when reranker is off
+        logger.info("⛔ Re-ranking DISABLED by user - using original embedding scores")
+        # When reranker is off, use the original FAISS score as final_score
         for r in retrieved:
             r["final_score"] = r.get("score", 0.0)
+            r["rerank_score"] = 0.0   # Optional: to keep UI clean
     
     # Case 1: No results
     if not retrieved:
