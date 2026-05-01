@@ -30,17 +30,34 @@ with st.sidebar:
                 
                 result = response.json()
                 st.success(f"✅ Successfully uploaded: **{uploaded_file.name}**")
-                if "chunks_created" in result:
-                    st.info(f"Created {result.get('chunks_created', 0)} chunks")
-                    
+                
             except requests.exceptions.RequestException as e:
                 st.error(f"❌ Upload failed: {e}")
 
-    # st.divider()
-    # st.markdown("### ⚙️ Settings")
-    # top_k = st.slider("Number of chunks to retrieve (Top-K)", 
-    #                   min_value=3, max_value=15, value=TOP_K, step=1)
+    st.divider()
+    
+    # ==================== SETTINGS ====================
+    st.markdown("### ⚙️ Settings")
+    
+    # Re-ranking Toggle
+    use_reranker = st.checkbox(
+        "Enable Re-ranking", 
+        value=True,
+        help="Uses CrossEncoder reranker + score fusion for better relevance. Recommended."
+    )
+    
+    # Optional: Top-K slider
+    top_k = st.slider(
+        "Number of chunks to retrieve", 
+        min_value=3, 
+        max_value=15, 
+        value=TOP_K, 
+        step=1,
+        help="Higher value = more context but slower"
+    )
 
+    st.caption("Re-ranking improves answer quality but adds slight latency.")
+    
 # --------------------- Main Area ---------------------
 st.title("📚 RAG Assistant")
 st.caption("Ask questions about your uploaded PDFs • Powered by Groq + FAISS")
@@ -96,18 +113,17 @@ for message in st.session_state.chat_history:
                 with st.expander("📚 View Sources & Relevance", expanded=False):
                     for i, src in enumerate(message["sources"], 1):
                         final_score = src.get("final_score", src.get("score", 0))
-                        rerank_score = src.get("rerank_score")
+                        rerank_score = src.get("rerank_score", 0)
                         orig_score = src.get("score", 0)
 
-                        color = "🟢" if final_score >= 0.5 else "🟡" if final_score >= 0.3 else "🔴"
+                        color = "🟢" if final_score >= 0.6 else "🟡" if final_score >= 0.4 else "🔴"
 
                         st.markdown(f"""
 **{color} Source {i}** — **{src.get('file', 'Unknown')}** (Page {src.get('page', '?')})  
 **Final Score:** `{final_score:.4f}`
                         """)
 
-                        if rerank_score is not None:
-                            st.caption(f"Rerank: `{rerank_score:.3f}` | Original: `{orig_score:.3f}`")
+                        st.caption(f"Rerank: `{rerank_score:.3f}` | Original: `{orig_score:.3f}`")
 
                         st.markdown(f"> {src.get('snippet', '')}")
                         if i < len(message["sources"]):

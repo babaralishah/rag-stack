@@ -25,13 +25,14 @@ def rag_answer(
     question: str,
     retrieved: List[Dict[str, Any]],
     min_score: float = 0.35,
+    use_reranker: bool = True,
 ) -> Dict[str, Any]:
     
     # === Reranking Step ===
-    if USE_RERANKER and retrieved:
+    if use_reranker and retrieved:
         try:
             reranker = get_reranker()
-            logger.info(f"Re-ranking {len(retrieved)} chunks using BGE reranker + fusion")
+            logger.info(f"Re-ranking {len(retrieved)} chunks (user enabled)")
             
             retrieved = reranker.rerank(
                 query=question,

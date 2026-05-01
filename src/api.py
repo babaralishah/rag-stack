@@ -88,6 +88,7 @@ def already_ingested(file_hash: str) -> bool:
 class QueryRequest(BaseModel):
     question: str
     top_k: int = TOP_K
+    use_reranker: bool = True
 
 class QueryResponse(BaseModel):
     answer: str
@@ -164,17 +165,18 @@ def query(req: QueryRequest):
     store = load_or_create_store(dim=EMBED_DIM)
     qv = emb.embed_query(q)
 
-    # === FIXED: Properly import config variables ===
-    from src.config import RERANKER_TOP_K, USE_RERANKER
+    # Use config as fallback, but respect user's choice from UI
+    from src.config import RERANKER_TOP_K
 
-    retrieve_k = RERANKER_TOP_K if USE_RERANKER else req.top_k
+    retrieve_k = RERANKER_TOP_K if req.use_reranker else req.top_k
 
     retrieved = store.search(qv, top_k=retrieve_k)
 
     out = rag_answer(
         question=q,
         retrieved=retrieved,
-        min_score=MIN_SCORE
+        min_score=MIN_SCORE,
+        use_reranker=req.use_reranker   # Pass user's choice to rag_answer
     )
 
     return QueryResponse(answer=out["answer"], sources=out["sources"])
