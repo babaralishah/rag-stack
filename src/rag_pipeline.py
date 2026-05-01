@@ -32,8 +32,7 @@ def rag_answer(
     if use_reranker and retrieved:
         try:
             reranker = get_reranker()
-            logger.info(f"Re-ranking {len(retrieved)} chunks (user enabled)")
-            
+            logger.info(f"Re-ranking {len(retrieved)} chunks")
             retrieved = reranker.rerank(
                 query=question,
                 candidates=retrieved,
@@ -41,7 +40,7 @@ def rag_answer(
                 fusion_alpha=RERANKER_FUSION_ALPHA
             )
         except Exception as e:
-            logger.error(f"Reranking failed: {e}. Falling back to original order.")
+            logger.error(f"Reranking failed: {e}")
     
     # Case 1: No results
     if not retrieved:

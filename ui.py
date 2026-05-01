@@ -75,7 +75,11 @@ if question:
 
     with st.spinner("🔍 Retrieving relevant chunks... Thinking..."):
         try:
-            payload = {"question": question, "top_k": TOP_K}
+            payload = {
+            "question": question, 
+            "top_k": top_k,           # Use the slider value
+            "use_reranker": use_reranker   # Send the checkbox value
+        }
             r = requests.post(f"{API_BASE_URL}/query", json=payload, timeout=180)
             r.raise_for_status()
             data: Dict[str, Any] = r.json()
