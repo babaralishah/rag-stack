@@ -49,7 +49,7 @@ with st.sidebar:
     # Optional: Top-K slider
     top_k = st.slider(
         "Number of chunks to retrieve", 
-        min_value=3, 
+        min_value=1, 
         max_value=15, 
         value=TOP_K, 
         step=1,
