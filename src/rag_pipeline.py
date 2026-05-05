@@ -83,6 +83,23 @@ Instructions:
 
 Be transparent. Do not hallucinate.
 
+**Examples:**
+
+Question: What is the main topic of this document?
+Context: [some context about RAG system]
+Answer: The document is about building a Local RAG application using FastAPI, Streamlit, and FAISS.
+
+Question: What is the person's experience?
+Context: [resume context]
+Answer: According to the document, the person worked as Associate Software Engineer from July 2020 to July 2022.
+
+Now answer the following question:
+
+CONTEXT:
+{context}
+
+QUESTION: {question}
+
 ANSWER:"""
 
     answer = generate_answer(prompt)
