@@ -43,17 +43,17 @@ def rag_answer(
             )
         except Exception as e:
             logger.error(f"Reranking failed: {e}. Falling back to original scores.")
-            # Fallback: use original embedding score as final
             for r in retrieved:
                 r["final_score"] = r.get("score", 0.0)
     else:
-        logger.info("⛔ Re-ranking DISABLED by user - using original embedding scores")
-        # When reranker is off, use the original FAISS score as final_score
+        logger.info("⛔ Re-ranking DISABLED by user")
         for r in retrieved:
             r["final_score"] = r.get("score", 0.0)
-            r["rerank_score"] = 0.0   # Optional: to keep UI clean
+            r["rerank_score"] = 0.0
+
+    # Limit to requested number
     retrieved = retrieved[:final_top_k]
-    
+
     # Case 1: No results
     if not retrieved:
         general_answer = generate_answer(f"Answer this question concisely using your general knowledge: {question}")
@@ -63,37 +63,30 @@ def rag_answer(
             "sources": [],
         }
 
-    # Build context from (possibly reranked) results
+    # Build context
     context = build_context(retrieved)
 
-    prompt = f"""You are a careful, honest, and helpful assistant.
+    # === Improved Prompt with Few-Shot ===
+    prompt = f"""You are a careful, honest, and helpful assistant. 
+Answer questions using **only** the provided context.
 
-Use the provided context to answer the question.
-
-CONTEXT:
-{context}
-
-QUESTION: {question}
-
-Instructions:
-- If the context contains enough relevant information, answer **directly** using the context.
-- If the context does **NOT** contain enough information:
-  1. First say: "I don't have sufficient information in the uploaded documents..."
-  2. Then you may add general knowledge.
-
-Be transparent. Do not hallucinate.
+**Instructions:**
+- If the context has enough information, answer directly from it.
+- If the context does NOT have enough information, say: "I don't have sufficient information in the uploaded documents to answer this accurately."
+- Do not hallucinate or make up facts.
+- Be clear, concise, and professional.
 
 **Examples:**
 
 Question: What is the main topic of this document?
-Context: [some context about RAG system]
-Answer: The document is about building a Local RAG application using FastAPI, Streamlit, and FAISS.
+Context: [Document talks about building RAG systems using FastAPI and FAISS]
+Answer: The document is about building a Local Retrieval-Augmented Generation (RAG) application using FastAPI, Streamlit, and FAISS.
 
-Question: What is the person's experience?
-Context: [resume context]
+Question: What is the person's work experience?
+Context: [Resume context mentioning Associate Software Engineer role]
 Answer: According to the document, the person worked as Associate Software Engineer from July 2020 to July 2022.
 
-Now answer the following question:
+Now answer the real question:
 
 CONTEXT:
 {context}
