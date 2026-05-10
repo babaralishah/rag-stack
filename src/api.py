@@ -154,6 +154,10 @@ def query(req: QueryRequest):
     if not q:
         raise HTTPException(status_code=400, detail="Question cannot be empty.")
 
+    # === QUERY REWRITING ===
+    from src.query_rewriter import rewrite_query
+    rewritten_query = rewrite_query(q)
+
     emb = get_embedder()
     
     # Ensure store exists
@@ -163,18 +167,19 @@ def query(req: QueryRequest):
         return QueryResponse(answer="No documents indexed yet. Upload a PDF first.", sources=[])
 
     store = load_or_create_store(dim=EMBED_DIM)
-    qv = emb.embed_query(q)
+    
+    # Use rewritten query for better retrieval
+    qv = emb.embed_query(rewritten_query)
 
-    # === Use the value sent from UI ===
     from src.config import RERANKER_TOP_K
 
     retrieve_k = RERANKER_TOP_K if req.use_reranker else req.top_k
 
     retrieved = store.search(qv, top_k=retrieve_k)
 
-    # Pass the user's choice to rag_answer
     out = rag_answer(
-        question=q,
+        # question=rewritten_query,    # Pass rewritten question to LLM
+        question=q,  # Keep original question for answer generation
         retrieved=retrieved,
         min_score=MIN_SCORE,
         use_reranker=req.use_reranker,
