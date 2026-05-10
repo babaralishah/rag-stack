@@ -1,29 +1,27 @@
 import os
 import logging
-from functools import lru_cache
 from groq import Groq
 
 logger = logging.getLogger("rag")
 
-# Optional: Google Gemini
+# ====================== GEMINI SETUP (New Package) ======================
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+GEMINI_AVAILABLE = False
+client_gemini = None
+
 try:
     from google import genai
     GEMINI_AVAILABLE = True
+    if GEMINI_API_KEY:
+        client_gemini = genai.Client(api_key=GEMINI_API_KEY)
+        logger.info("✅ Google Gemini (new genai package) initialized successfully")
+    else:
+        logger.info("GEMINI_API_KEY not found. Gemini disabled.")
 except ImportError:
-    genai = None
-    GEMINI_AVAILABLE = False
-    logger.warning("google-generativeai not installed. Gemini will not be available.")
-
-# Initialize Gemini if key and package exist
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-if GEMINI_API_KEY and GEMINI_AVAILABLE:
-    genai.configure(api_key=GEMINI_API_KEY)
-    logger.info("✅ Google Gemini API initialized")
+    logger.warning("google-genai package is not installed. Gemini will be unavailable.")
 
 
-@lru_cache(maxsize=1)
-def get_groq_client() -> Groq:
-    """Return a cached Groq client (created once per process)."""
+def get_groq_client():
     api_key = os.getenv("GROQ_API_KEY")
     if not api_key:
         raise ValueError("GROQ_API_KEY environment variable is required.")
@@ -34,31 +32,26 @@ def generate_answer(
     prompt: str,
     model: str = "llama-3.3-70b-versatile",
     temperature: float = 0.7,
-    max_tokens: int = 1024,
+    max_tokens: int = 1024
 ) -> str:
     """
-    Unified function to call different LLMs.
-    Routes to Gemini when the model name starts with "gemini" and the API
-    key is present; otherwise uses Groq.
+    Unified LLM caller supporting Groq and Google Gemini.
     """
     try:
         # === GEMINI ROUTE ===
         if model.startswith("gemini"):
-            if not GEMINI_AVAILABLE or not GEMINI_API_KEY:
-                # Explicit error instead of silently passing a Gemini model name to Groq
-                raise ValueError(
-                    f"Gemini model '{model}' requested but Gemini is not available. "
-                    "Check GEMINI_API_KEY and google-generativeai installation."
+            if not GEMINI_AVAILABLE or not client_gemini:
+                raise ValueError(f"Gemini model '{model}' requested but Gemini is not available.")
+            
+            response = client_gemini.models.generate_content(
+                model=model,
+                contents=prompt,
+                config=genai.types.GenerateContentConfig(
+                    temperature=temperature,
+                    max_output_tokens=max_tokens,
                 )
-            model_instance = genai.GenerativeModel(model)
-            response = model_instance.generate_content(
-                prompt,
-                generation_config={
-                    "temperature": temperature,
-                    "max_output_tokens": max_tokens,
-                },
             )
-            logger.info("Generated using Gemini model: %s", model)
+            logger.info(f"Generated using Gemini: {model}")
             return response.text.strip()
 
         # === GROQ ROUTE (Default) ===
@@ -70,9 +63,9 @@ def generate_answer(
             max_tokens=max_tokens,
         )
         answer = response.choices[0].message.content.strip()
-        logger.info("Generated using Groq model: %s", model)
+        logger.info(f"Generated using Groq: {model}")
         return answer
 
     except Exception as e:
-        logger.error("LLM error with model '%s': %s", model, e, exc_info=True)
+        logger.error(f"LLM Error with model {model}: {e}")
         return f"LLM Error: {str(e)}"
