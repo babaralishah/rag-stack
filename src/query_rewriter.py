@@ -4,31 +4,32 @@ from src.hosted_llm import generate_answer
 logger = logging.getLogger(__name__)
 
 def rewrite_query(original_question: str) -> str:
-    """
-    Rewrites the user's question to be more effective for retrieval.
-    """
-    prompt = f"""You are an expert at rewriting questions for document retrieval systems.
+    prompt = f"""You are an expert at rewriting questions for better document retrieval.
 
 Original Question: {original_question}
 
-Task: Rewrite the question to be more specific, detailed, and effective for semantic search.
-- Make it clear and professional.
-- Expand vague questions.
-- Keep it as ONE single question.
-- Do not answer it, just rewrite.
+Rewrite the question to be more specific, detailed, and effective for semantic search.
+Keep it as ONE clear question. Do not answer it.
 
 Rewritten Question:"""
 
     try:
-        rewritten = generate_answer(prompt, temperature=0.3, max_tokens=150)
+        # Use cheaper & faster model for rewriting
+        rewritten = generate_answer(
+            prompt=prompt, 
+            model="llama-3.1-8b-instant",   # Fast and cheap
+            temperature=0.3,
+            max_tokens=200
+        )
+        
         rewritten = rewritten.strip()
         
-        if len(rewritten) < 10:  # Safety check
+        if len(rewritten) < 5:   # fallback
             return original_question
             
-        logger.info(f"Query Rewritten: '{original_question}' → '{rewritten}'")
+        logger.info(f"🔄 Query Rewritten: '{original_question}' → '{rewritten}'")
         return rewritten
         
     except Exception as e:
-        logger.warning(f"Query rewriting failed: {e}. Using original question.")
+        logger.warning(f"Query rewriting failed: {e}")
         return original_question
