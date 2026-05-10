@@ -37,7 +37,7 @@ Rewritten Question:"""
         rewritten = generate_answer(
             prompt=prompt,
             # model="llama-3.1-8b-instant",   # Fast model for rewriting
-            model="gemini-2.0-flash",   # Fast model for rewriting
+            model="gemini-2.5-flash",   # Fast model for rewriting
             temperature=0.3,
             max_tokens=250
         )
