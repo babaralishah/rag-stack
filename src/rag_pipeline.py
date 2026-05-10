@@ -4,7 +4,7 @@ from src.config import MAX_CHARS, USE_RERANKER, RERANKER_KEEP_TOP_K, RERANKER_FU
 from src.hosted_llm import generate_answer
 from src.reranker import get_reranker
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("rag")
 
 def build_context(results: List[Dict[str, Any]], max_chars: int = MAX_CHARS) -> str:
     parts = []

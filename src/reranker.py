@@ -4,7 +4,7 @@ import numpy as np
 import torch
 from sentence_transformers import CrossEncoder
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("rag")
 
 class CrossEncoderReranker:
     def __init__(self, model_name: str = "BAAI/bge-reranker-base"):

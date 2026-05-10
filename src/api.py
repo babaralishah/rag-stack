@@ -1,4 +1,17 @@
 ﻿import logging
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
+    handlers=[
+        logging.StreamHandler(),
+        logging.FileHandler("rag.log", encoding="utf-8")
+    ]
+)
+
+logger = logging.getLogger("rag")
+logger.setLevel(logging.INFO)
+
 from pathlib import Path
 from typing import Optional, List, Dict, Any
 
@@ -17,32 +30,7 @@ from src.embedder import HFEmbedder
 from src.vector_store import FaissVectorStore
 from src.rag_pipeline import rag_answer
 
-# logging.basicConfig(
-#     level=logging.INFO,
-#     format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
-#     handlers=[
-#         logging.FileHandler("rag.log")
-#         # logging.StreamHandler()
-#     ]
-# )
-
-# logger = logging.getLogger("api")
-
-# Force show INFO logs on HF Spaces
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
-    handlers=[
-        logging.StreamHandler(),   # This is important for HF Spaces
-        logging.FileHandler("rag.log")
-    ]
-)
-
-logger = logging.getLogger("rag")
-logger.setLevel(logging.INFO)
-
 app = FastAPI(title="Local RAG API", version="0.1")
-
 
 @app.get("/")
 def home():

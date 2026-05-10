@@ -12,7 +12,7 @@ import faiss
 
 from src.config import TOP_K
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("rag")
 
 class FaissVectorStore:
     def __init__(self, dim: int, store_dir: str):

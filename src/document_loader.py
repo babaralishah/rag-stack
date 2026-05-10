@@ -7,7 +7,7 @@ import logging
 
 from pypdf import PdfReader
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("rag")
 
 @dataclass
 class DocumentPage:

@@ -2,7 +2,7 @@ import os
 import logging
 from groq import Groq
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("rag")
 
 def get_groq_client():
     api_key = os.getenv("GROQ_API_KEY")
