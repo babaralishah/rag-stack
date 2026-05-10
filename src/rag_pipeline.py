@@ -1,6 +1,6 @@
 import logging
 from typing import List, Dict, Any
-from src.config import MAX_CHARS, USE_RERANKER, RERANKER_KEEP_TOP_K, RERANKER_FUSION_ALPHA
+from src.config import MAX_CHARS, RERANKER_FUSION_ALPHA
 from src.hosted_llm import generate_answer
 from src.reranker import get_reranker
 

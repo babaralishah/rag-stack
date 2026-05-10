@@ -14,8 +14,6 @@ logger.setLevel(logging.INFO)
 
 from pathlib import Path
 from typing import Optional, List, Dict, Any
-
-from src.config import RERANKER_TOP_K, USE_RERANKER
     
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from pydantic import BaseModel
@@ -29,6 +27,7 @@ from src.chunker import chunk_text
 from src.embedder import HFEmbedder
 from src.vector_store import FaissVectorStore
 from src.rag_pipeline import rag_answer
+from src.query_rewriter import rewrite_query
 
 app = FastAPI(title="Local RAG API", version="0.1")
 
@@ -155,7 +154,6 @@ def query(req: QueryRequest):
         raise HTTPException(status_code=400, detail="Question cannot be empty.")
 
     # === QUERY REWRITING ===
-    from src.query_rewriter import rewrite_query
     rewritten_query = rewrite_query(q)
 
     emb = get_embedder()
