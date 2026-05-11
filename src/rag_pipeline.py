@@ -51,7 +51,7 @@ def rag_answer(
             r["final_score"] = r.get("score", 0.0)
             r["rerank_score"] = 0.0
 
-    # Limit to requested number
+    # Safety limit
     retrieved = retrieved[:final_top_k]
 
     # Case 1: No results
@@ -66,25 +66,20 @@ def rag_answer(
     # Build context
     context = build_context(retrieved)
 
-    # === Improved Prompt with Few-Shot ===
+    # Final Prompt with Few-Shot
     prompt = f"""You are a careful, honest, and helpful assistant. 
-Answer questions using **only** the provided context.
+Answer using **only** the provided context.
 
 **Instructions:**
 - If the context has enough information, answer directly from it.
-- If the context does NOT have enough information, say: "I don't have sufficient information in the uploaded documents to answer this accurately."
-- Do not hallucinate or make up facts.
-- Be clear, concise, and professional.
+- If not, say: "I don't have sufficient information in the uploaded documents to answer this accurately."
+- Do not hallucinate.
 
 **Examples:**
 
 Question: What is the main topic of this document?
-Context: [Document talks about building RAG systems using FastAPI and FAISS]
-Answer: The document is about building a Local Retrieval-Augmented Generation (RAG) application using FastAPI, Streamlit, and FAISS.
-
-Question: What is the person's work experience?
-Context: [Resume context mentioning Associate Software Engineer role]
-Answer: According to the document, the person worked as Associate Software Engineer from July 2020 to July 2022.
+Context: [Document about RAG system]
+Answer: The document is about building a Local RAG application using FastAPI, Streamlit, and FAISS.
 
 Now answer the real question:
 
@@ -95,9 +90,9 @@ QUESTION: {question}
 
 ANSWER:"""
 
-    answer = generate_answer(prompt)
+    answer = generate_answer(prompt, temperature=0.1)   # Low temperature = more grounded
 
-    # Prepare sources for UI
+    # Prepare sources
     sources = []
     for r in retrieved[:3]:
         file = r["metadata"].get("source_file", "unknown")
