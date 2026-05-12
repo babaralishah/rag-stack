@@ -1,5 +1,5 @@
 import logging
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from pathlib import Path
 import json
 import numpy as np
@@ -18,13 +18,13 @@ class FaissVectorStore:
         self.index_path = self.store_dir / "index.faiss"
         self.meta_path = self.store_dir / "meta.jsonl"
 
-        self.index = faiss.IndexFlatIP(dim)   # Semantic Search
-        self.bm25 = None                      # Keyword Search (BM25)
-        self.records: List[Dict[str, Any]] = []  # All chunks
+        self.index = faiss.IndexFlatIP(dim)   # Semantic Search (Inner Product = Cosine if normalized)
+        self.bm25 = None                      # Keyword Search
+        self.records: List[Dict[str, Any]] = []  # Full chunk data
 
     def add(self, embeddings: np.ndarray, texts: List[str], metadatas: List[Dict[str, Any]]):
         if len(texts) != len(metadatas) or len(texts) != embeddings.shape[0]:
-            raise ValueError("Lengths mismatch")
+            raise ValueError("Lengths of embeddings, texts, and metadatas must match")
 
         if embeddings.dtype != np.float32:
             embeddings = embeddings.astype("float32")
@@ -34,73 +34,145 @@ class FaissVectorStore:
         for t, m in zip(texts, metadatas):
             self.records.append({"text": t, "metadata": m})
 
-        self._build_bm25()   # Build keyword index
+        self._build_bm25()
 
-        logger.info(f"Added {len(texts)} vectors. Total now: {len(self.records)}")
+        logger.info(f"Added {len(texts)} documents. Total: {len(self.records)} vectors.")
 
     def _build_bm25(self):
-        """Build BM25 keyword index"""
+        """Build BM25 index from current records."""
         if not self.records:
             return
         tokenized = [rec["text"].lower().split() for rec in self.records]
         self.bm25 = BM25Okapi(tokenized)
-        logger.info(f"BM25 index built with {len(self.records)} documents")
+        logger.debug(f"BM25 index rebuilt with {len(self.records)} documents")
 
-    def search(self, query_vec: np.ndarray, top_k: int = TOP_K, use_hybrid: bool = True) -> List[Dict[str, Any]]:
-        """Hybrid Search: Semantic + BM25"""
+    # ====================== CORE SEARCH METHODS ======================
+
+    def _semantic_search(self, query_vec: np.ndarray, k: int) -> List[Dict[str, Any]]:
+        """Pure semantic search using FAISS."""
         if query_vec.dtype != np.float32:
             query_vec = query_vec.astype("float32")
         if query_vec.ndim == 1:
             query_vec = query_vec.reshape(1, -1)
 
-        if self.index.ntotal == 0:
-            return []
+        scores, indices = self.index.search(query_vec, k)
 
-        # 1. Semantic Search (FAISS)
-        semantic_scores, semantic_idxs = self.index.search(query_vec, top_k * 2)
         results = []
-        for score, idx in zip(semantic_scores[0], semantic_idxs[0]):
+        for score, idx in zip(scores[0], indices[0]):
             if idx == -1:
                 continue
             rec = self.records[idx]
             results.append({
                 "text": rec["text"],
                 "metadata": rec["metadata"],
-                "score": float(score),           # FAISS semantic score
-                "semantic_score": float(score)
+                "semantic_score": float(score),
+                "score": float(score),          # Will be overwritten in fusion if hybrid
+                "source": "semantic"
             })
+        return results
 
-        # 2. Keyword Search (BM25) if hybrid enabled
-        if use_hybrid and self.bm25 and len(results) > 0:
-            try:
-                # Use top semantic results as context for better keyword search
-                context_text = " ".join([r["text"] for r in results[:8]])
-                tokenized_query = context_text.lower().split()
-                bm25_scores = self.bm25.get_scores(tokenized_query)
+    def _bm25_search(self, query_text: str, k: int) -> List[Dict[str, Any]]:
+        """Pure BM25 keyword search."""
+        if not self.bm25 or not query_text.strip():
+            return []
 
-                top_bm25_idx = np.argsort(bm25_scores)[-top_k:][::-1]
+        try:
+            tokenized_query = query_text.lower().split()
+            bm25_scores = self.bm25.get_scores(tokenized_query)
 
-                for idx in top_bm25_idx:
-                    rec = self.records[idx]
-                    results.append({
-                        "text": rec["text"],
-                        "metadata": rec["metadata"],
-                        "score": float(bm25_scores[idx]),
-                        "bm25_score": float(bm25_scores[idx])
-                    })
-            except Exception as e:
-                logger.warning(f"BM25 search failed: {e}")
+            # Get top-k indices
+            top_indices = np.argsort(bm25_scores)[-k:][::-1]
 
-        # Remove duplicates and return top_k
-        seen = set()
-        unique_results = []
-        for r in results:
-            key = r["text"][:150]
-            if key not in seen:
-                seen.add(key)
-                unique_results.append(r)
+            results = []
+            for idx in top_indices:
+                rec = self.records[idx]
+                results.append({
+                    "text": rec["text"],
+                    "metadata": rec["metadata"],
+                    "bm25_score": float(bm25_scores[idx]),
+                    "score": float(bm25_scores[idx]),
+                    "source": "bm25"
+                })
+            return results
+        except Exception as e:
+            logger.warning(f"BM25 search failed: {e}")
+            return []
 
-        return unique_results[:top_k]
+    @staticmethod
+    def _reciprocal_rank_fusion(
+        lists: List[List[Dict[str, Any]]], 
+        k: int = 60, 
+        top_n: int = 50
+    ) -> List[Dict[str, Any]]:
+        """
+        Reciprocal Rank Fusion - Robust score normalization across different retrievers.
+        """
+        score_dict: Dict[str, float] = {}
+
+        for rank_list in lists:
+            for rank, item in enumerate(rank_list):
+                # Use text as key (first 200 chars to avoid full text comparison)
+                key = item["text"][:200]
+                score_dict[key] = score_dict.get(key, 0.0) + 1.0 / (rank + k)
+
+        # Sort by RRF score
+        sorted_items = sorted(
+            score_dict.items(), 
+            key=lambda x: x[1], 
+            reverse=True
+        )[:top_n]
+
+        # Reconstruct full result objects
+        fused: List[Dict[str, Any]] = []
+        item_map = {item["text"][:200]: item for sublist in lists for item in sublist}
+
+        for key, rrf_score in sorted_items:
+            if key in item_map:  # Safety check
+                result = item_map[key].copy()
+                result["score"] = rrf_score          # Final fused score
+                result["rrf_score"] = rrf_score
+                fused.append(result)
+
+        return fused
+
+    def search(
+        self, 
+        query_vec: np.ndarray, 
+        top_k: int = TOP_K, 
+        use_hybrid: bool = True,
+        query_text: Optional[str] = None,      # NEW: Required for proper hybrid
+    ) -> List[Dict[str, Any]]:
+        """
+        Main search method - Hybrid Semantic + BM25 with RRF.
+        
+        Backward compatible: If query_text is None, falls back to semantic-only.
+        """
+        if self.index.ntotal == 0:
+            return []
+
+        # 1. Always do semantic search (base)
+        semantic_results = self._semantic_search(query_vec, k=top_k * 4)  # Over-retrieve
+
+        if not use_hybrid or not query_text:
+            logger.debug("Using semantic-only search")
+            return semantic_results[:top_k]
+
+        # 2. BM25 on original query
+        bm25_results = self._bm25_search(query_text, k=top_k * 4)
+
+        # 3. RRF Fusion
+        fused_results = self._reciprocal_rank_fusion(
+            [semantic_results, bm25_results], 
+            k=60, 
+            top_n=top_k * 3   # Over-retrieve for reranker
+        )
+
+        logger.debug(f"Hybrid search: {len(semantic_results)} semantic + "
+                    f"{len(bm25_results)} BM25 → {len(fused_results)} fused")
+
+        return fused_results[:top_k]
+
+    # ====================== PERSISTENCE ======================
 
     def save(self):
         self.store_dir.mkdir(parents=True, exist_ok=True)
@@ -110,7 +182,7 @@ class FaissVectorStore:
             for rec in self.records:
                 f.write(json.dumps(rec, ensure_ascii=False) + "\n")
 
-        logger.info("Saved FAISS + BM25 index")
+        logger.info(f"Saved FAISS + BM25 store with {len(self.records)} documents")
 
     @classmethod
     def load(cls, store_dir: str) -> "FaissVectorStore":
@@ -131,7 +203,7 @@ class FaissVectorStore:
             for line in f:
                 obj.records.append(json.loads(line))
 
-        obj._build_bm25()   # Rebuild BM25 index after loading
+        obj._build_bm25()
 
-        logger.info(f"Loaded FAISS + BM25 index ({obj.index.ntotal} vectors)")
+        logger.info(f"Loaded {obj.index.ntotal} vectors + BM25 index")
         return obj

@@ -173,11 +173,10 @@ def query(req: QueryRequest):
 
     retrieve_k = RERANKER_TOP_K if req.use_reranker else req.top_k
 
-    retrieved = store.search(qv, top_k=retrieve_k)
+    retrieved = store.search(qv, q, top_k=retrieve_k)
 
     out = rag_answer(
-        # question=rewritten_query,    # Pass rewritten question to LLM
-        question=q,  # Keep original question for answer generation
+        question=q,  # Keep original question for answer generation to LLM not rewritten question
         retrieved=retrieved,
         min_score=MIN_SCORE,
         use_reranker=req.use_reranker,
