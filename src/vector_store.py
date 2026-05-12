@@ -18,9 +18,9 @@ class FaissVectorStore:
         self.index_path = self.store_dir / "index.faiss"
         self.meta_path = self.store_dir / "meta.jsonl"
 
-        self.index = faiss.IndexFlatIP(dim)   # Semantic Search (Inner Product = Cosine if normalized)
-        self.bm25 = None                      # Keyword Search
-        self.records: List[Dict[str, Any]] = []  # Full chunk data
+        self.index = faiss.IndexFlatIP(dim)
+        self.bm25: Optional[BM25Okapi] = None
+        self.records: List[Dict[str, Any]] = []
 
     def add(self, embeddings: np.ndarray, texts: List[str], metadatas: List[Dict[str, Any]]):
         if len(texts) != len(metadatas) or len(texts) != embeddings.shape[0]:
@@ -36,20 +36,18 @@ class FaissVectorStore:
 
         self._build_bm25()
 
-        logger.info(f"Added {len(texts)} documents. Total: {len(self.records)} vectors.")
+        logger.info(f"Added {len(texts)} documents. Total vectors: {len(self.records)}")
 
     def _build_bm25(self):
-        """Build BM25 index from current records."""
         if not self.records:
             return
         tokenized = [rec["text"].lower().split() for rec in self.records]
         self.bm25 = BM25Okapi(tokenized)
-        logger.debug(f"BM25 index rebuilt with {len(self.records)} documents")
+        logger.debug(f"BM25 index built with {len(self.records)} documents")
 
-    # ====================== CORE SEARCH METHODS ======================
+    # ====================== INTERNAL SEARCH ======================
 
     def _semantic_search(self, query_vec: np.ndarray, k: int) -> List[Dict[str, Any]]:
-        """Pure semantic search using FAISS."""
         if query_vec.dtype != np.float32:
             query_vec = query_vec.astype("float32")
         if query_vec.ndim == 1:
@@ -66,21 +64,18 @@ class FaissVectorStore:
                 "text": rec["text"],
                 "metadata": rec["metadata"],
                 "semantic_score": float(score),
-                "score": float(score),          # Will be overwritten in fusion if hybrid
+                "score": float(score),
                 "source": "semantic"
             })
         return results
 
     def _bm25_search(self, query_text: str, k: int) -> List[Dict[str, Any]]:
-        """Pure BM25 keyword search."""
-        if not self.bm25 or not query_text.strip():
+        if not self.bm25 or not query_text or not query_text.strip():
             return []
 
         try:
             tokenized_query = query_text.lower().split()
             bm25_scores = self.bm25.get_scores(tokenized_query)
-
-            # Get top-k indices
             top_indices = np.argsort(bm25_scores)[-k:][::-1]
 
             results = []
@@ -104,70 +99,64 @@ class FaissVectorStore:
         k: int = 60, 
         top_n: int = 50
     ) -> List[Dict[str, Any]]:
-        """
-        Reciprocal Rank Fusion - Robust score normalization across different retrievers.
-        """
+        """Reciprocal Rank Fusion (Industry Standard)"""
         score_dict: Dict[str, float] = {}
+        item_map = {}
 
         for rank_list in lists:
             for rank, item in enumerate(rank_list):
-                # Use text as key (first 200 chars to avoid full text comparison)
                 key = item["text"][:200]
+                item_map[key] = item
                 score_dict[key] = score_dict.get(key, 0.0) + 1.0 / (rank + k)
 
         # Sort by RRF score
-        sorted_items = sorted(
-            score_dict.items(), 
-            key=lambda x: x[1], 
-            reverse=True
-        )[:top_n]
+        sorted_keys = sorted(score_dict.items(), key=lambda x: x[1], reverse=True)[:top_n]
 
-        # Reconstruct full result objects
-        fused: List[Dict[str, Any]] = []
-        item_map = {item["text"][:200]: item for sublist in lists for item in sublist}
-
-        for key, rrf_score in sorted_items:
-            if key in item_map:  # Safety check
+        fused = []
+        for key, rrf_score in sorted_keys:
+            if key in item_map:
                 result = item_map[key].copy()
-                result["score"] = rrf_score          # Final fused score
-                result["rrf_score"] = rrf_score
+                result["score"] = float(rrf_score)
+                result["rrf_score"] = float(rrf_score)
                 fused.append(result)
 
         return fused
 
+    # ====================== PUBLIC SEARCH API ======================
+
     def search(
-        self, 
-        query_vec: np.ndarray, 
-        top_k: int = TOP_K, 
+        self,
+        query_vec: np.ndarray,
+        query_text: Optional[str] = None,      # Now 2nd positional for compatibility
+        top_k: int = TOP_K,
         use_hybrid: bool = True,
-        query_text: Optional[str] = None,      # NEW: Required for proper hybrid
     ) -> List[Dict[str, Any]]:
         """
-        Main search method - Hybrid Semantic + BM25 with RRF.
+        Main hybrid search method.
         
-        Backward compatible: If query_text is None, falls back to semantic-only.
+        Compatible with old calls:
+            search(query_vec, top_k=...)
+            search(query_vec, query_text, top_k=...)
         """
         if self.index.ntotal == 0:
             return []
 
-        # 1. Always do semantic search (base)
-        semantic_results = self._semantic_search(query_vec, k=top_k * 4)  # Over-retrieve
+        # Semantic search (always performed)
+        semantic_results = self._semantic_search(query_vec, k=top_k * 4)
 
         if not use_hybrid or not query_text:
-            logger.debug("Using semantic-only search")
             return semantic_results[:top_k]
 
-        # 2. BM25 on original query
+        # BM25 + RRF Hybrid
         bm25_results = self._bm25_search(query_text, k=top_k * 4)
 
-        # 3. RRF Fusion
         fused_results = self._reciprocal_rank_fusion(
-            [semantic_results, bm25_results], 
-            k=60, 
-            top_n=top_k * 3   # Over-retrieve for reranker
+            [semantic_results, bm25_results],
+            k=60,
+            top_n=top_k * 3
         )
 
-        logger.debug(f"Hybrid search: {len(semantic_results)} semantic + "
+        logger.debug(f"Hybrid RRF: {len(semantic_results)} semantic + "
                     f"{len(bm25_results)} BM25 → {len(fused_results)} fused")
 
         return fused_results[:top_k]
@@ -182,7 +171,7 @@ class FaissVectorStore:
             for rec in self.records:
                 f.write(json.dumps(rec, ensure_ascii=False) + "\n")
 
-        logger.info(f"Saved FAISS + BM25 store with {len(self.records)} documents")
+        logger.info(f"Vector store saved ({len(self.records)} documents)")
 
     @classmethod
     def load(cls, store_dir: str) -> "FaissVectorStore":
@@ -191,12 +180,10 @@ class FaissVectorStore:
         meta_path = store_dir / "meta.jsonl"
 
         if not index_path.exists() or not meta_path.exists():
-            raise FileNotFoundError(f"Index files not found in {store_dir}")
+            raise FileNotFoundError(f"Index not found in {store_dir}")
 
         index = faiss.read_index(str(index_path))
-        dim = index.d
-
-        obj = cls(dim=dim, store_dir=str(store_dir))
+        obj = cls(dim=index.d, store_dir=str(store_dir))
         obj.index = index
 
         with meta_path.open("r", encoding="utf-8") as f:
@@ -204,6 +191,5 @@ class FaissVectorStore:
                 obj.records.append(json.loads(line))
 
         obj._build_bm25()
-
-        logger.info(f"Loaded {obj.index.ntotal} vectors + BM25 index")
+        logger.info(f"Loaded {obj.index.ntotal} vectors with BM25 index")
         return obj
