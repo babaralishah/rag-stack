@@ -169,7 +169,12 @@ def query(req: QueryRequest):
 
     retrieve_k = RERANKER_TOP_K if req.use_reranker else req.top_k
 
-    retrieved = store.search(qv, rewritten_query, top_k=retrieve_k)
+    retrieved = store.search(
+    query_vec=qv,
+    query_text=rewritten_query,
+    top_k=retrieve_k,
+    use_hybrid=True
+    )
 
     out = rag_answer(
         question=q,  # Keep original question for answer generation to LLM not rewritten question

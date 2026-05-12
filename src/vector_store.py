@@ -127,17 +127,10 @@ class FaissVectorStore:
     def search(
         self,
         query_vec: np.ndarray,
-        query_text: Optional[str] = None,      # Now 2nd positional for compatibility
+        query_text: Optional[str] = None,
         top_k: int = TOP_K,
         use_hybrid: bool = True,
     ) -> List[Dict[str, Any]]:
-        """
-        Main hybrid search method.
-        
-        Compatible with old calls:
-            search(query_vec, top_k=...)
-            search(query_vec, query_text, top_k=...)
-        """
         if self.index.ntotal == 0:
             return []
 
