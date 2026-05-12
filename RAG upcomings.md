@@ -10,3 +10,5 @@
 8. **Conversation Memory** — Maintain chat history with contextual awareness across turns
 9. **Evaluation Framework** — Define and implement metrics to assess retrieval and generation quality
 10. **Advanced RAG** — Explore agentic patterns, query routing, and other advanced techniques
+11. **Custoimization** — Add toggle buttons in the UI for almost every feature, query-rewriting, reranking, hybrid-search, multi-llm 
+12. **Latency Optimization** — Do improve the code functions in order to reduce the latecny, try running a few things parallel where possible [Hypothetical Document Embeddings (HyDE)]
