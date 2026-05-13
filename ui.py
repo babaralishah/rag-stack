@@ -19,66 +19,72 @@ with st.sidebar:
     st.header("📄 Document Upload")
     st.caption("Upload PDFs to build your knowledge base")
 
-    uploaded_file = st.file_uploader("Choose a PDF file", type=["pdf"])
+    uploaded_file = st.file_uploader("Choose a PDF file", type=["pdf"], key="pdf_uploader")
 
     if uploaded_file is not None:
-        with st.spinner("Uploading and indexing document..."):
+        with st.spinner("Uploading and indexing..."):
             try:
                 files = {"file": (uploaded_file.name, uploaded_file.getvalue(), "application/pdf")}
                 response = requests.post(f"{API_BASE_URL}/upload", files=files, timeout=180)
                 response.raise_for_status()
                 result = response.json()
-                st.success(f"✅ Uploaded: **{uploaded_file.name}**")
+                st.success(f"✅ **{uploaded_file.name}** uploaded successfully!")
+                st.rerun()   # Refresh to show in documents list
             except Exception as e:
-                st.error(f"Upload failed: {e}")
+                st.error(f"❌ Upload failed: {e}")
 
 # ==================== DOCUMENT MANAGEMENT ====================
     st.divider()
     st.subheader("📚 Uploaded Documents")
 
     try:
-        docs_response = requests.get(f"{API_BASE_URL}/documents", timeout=10)
+        docs_response = requests.get(f"{API_BASE_URL}/documents", timeout=15)
+        
         if docs_response.status_code == 200:
             documents = docs_response.json()
 
             if documents:
                 for doc in documents:
-                    with st.container(border=True):
-                        col1, col2 = st.columns([4, 1])
+                    with st.expander(f"📄 {doc['filename']}", expanded=False):
+                        st.caption(f"**Chunks:** {doc['chunk_count']} | **Hash:** {doc['file_hash'][:8]}...")
+                        
+                        col1, col2 = st.columns([3, 1])
                         with col1:
-                            st.markdown(f"**{doc['filename']}**")
-                            st.caption(f"{doc['chunk_count']} chunks • {doc.get('uploaded_at', 'N/A')}")
+                            st.caption(f"Uploaded: {doc.get('uploaded_at', 'N/A')}")
                         with col2:
-                            if st.button("🗑️", key=f"del_{doc['file_hash']}", help="Delete document"):
+                            if st.button("🗑️ Delete", key=f"del_{doc['file_hash']}", use_container_width=True):
                                 try:
-                                    del_resp = requests.delete(f"{API_BASE_URL}/documents/{doc['file_hash']}")
-                                    if del_resp.status_code == 200:
-                                        st.success("Document deleted!")
-                                        st.rerun()
-                                    else:
-                                        st.error("Failed to delete")
+                                    with st.spinner("Deleting..."):
+                                        del_resp = requests.delete(f"{API_BASE_URL}/documents/{doc['file_hash']}")
+                                        if del_resp.status_code == 200:
+                                            st.success("Document deleted successfully!")
+                                            st.rerun()
+                                        else:
+                                            st.error("Failed to delete document")
                                 except Exception as e:
                                     st.error(f"Error: {e}")
             else:
                 st.info("No documents uploaded yet.")
         else:
-            st.warning("Could not fetch documents list.")
+            st.warning("Could not load documents list.")
+            
     except Exception as e:
-        st.error(f"Failed to load documents: {e}")
+        st.error(f"Failed to fetch documents: {str(e)}")
             
     # ==================== SETTINGS ====================
     st.divider()
     st.subheader("⚙️ Settings")
 
-    use_reranker = st.checkbox("Enable Re-ranking", value=True, 
-                              help="Improves answer quality but adds slight latency")
-    
-    use_hybrid = st.checkbox("Enable Hybrid Search", value=True,
-                            help="Combines Semantic + Keyword (BM25) search")
+    col_r1, col_r2 = st.columns(2)
+    with col_r1:
+        use_reranker = st.checkbox("Enable Re-ranking", value=True, 
+                                  help="Improves relevance using CrossEncoder")
+    with col_r2:
+        use_hybrid = st.checkbox("Enable Hybrid Search", value=True,
+                                help="Semantic + Keyword (BM25)")
 
     top_k = st.slider("Number of chunks to retrieve", 
-                      min_value=3, max_value=15, value=5, 
-                      help="Higher = more context, but slower")
+                      min_value=3, max_value=15, value=6, step=1)
     
 # --------------------- Main Area ---------------------
 st.title("📚 RAG Assistant")

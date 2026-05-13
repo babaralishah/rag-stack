@@ -189,16 +189,15 @@ class FaissVectorStore:
     
     
     def delete_by_file_hash(self, file_hash: str) -> int:
-        """Delete all chunks belonging to a specific file and rebuild index"""
+        """Delete document and rebuild indexes"""
         if not file_hash:
             return 0
 
-        # Keep only records that do NOT belong to this file
         kept_records = [
             rec for rec in self.records 
-            if rec["metadata"].get("file_hash") != file_hash
+            if rec.get("metadata", {}).get("file_hash") != file_hash
         ]
-        
+
         deleted_count = len(self.records) - len(kept_records)
 
         if deleted_count == 0:
@@ -207,25 +206,21 @@ class FaissVectorStore:
 
         self.records = kept_records
 
-        # Rebuild FAISS index
+        # Rebuild FAISS
         if self.records:
             try:
-                # Import here to avoid circular imports
                 from src.embedder import HFEmbedder
                 from src.config import EMBED_MODEL
                 
                 embedder = HFEmbedder(model_name=EMBED_MODEL)
                 texts = [r["text"] for r in self.records]
-                
                 embeddings = embedder.embed_texts(texts)
-                
+
                 self.index = faiss.IndexFlatIP(self.dim)
                 self.index.add(embeddings.astype("float32"))
-                
-                logger.info(f"Rebuilt FAISS index with {len(self.records)} chunks after deletion")
+                logger.info(f"Rebuilt FAISS with {len(self.records)} chunks")
             except Exception as e:
-                logger.error(f"Failed to rebuild FAISS index: {e}")
-                # Fallback: reset index
+                logger.error(f"FAISS rebuild failed: {e}")
                 self.index = faiss.IndexFlatIP(self.dim)
         else:
             self.index = faiss.IndexFlatIP(self.dim)
@@ -233,20 +228,30 @@ class FaissVectorStore:
         # Rebuild BM25
         self._build_bm25()
 
-        logger.info(f"✅ Deleted {deleted_count} chunks for file_hash: {file_hash}")
+        logger.info(f"✅ Deleted document {file_hash} ({deleted_count} chunks)")
         return deleted_count
     
     def get_all_documents(self) -> List[Dict]:
-        """Return list of unique documents"""
+        """Return list of unique documents with metadata"""
         from collections import defaultdict
-        docs = defaultdict(lambda: {"chunk_count": 0})
-        
+        docs = defaultdict(lambda: {
+            "file_hash": "",
+            "filename": "",
+            "chunk_count": 0,
+            "uploaded_at": ""
+        })
+
         for rec in self.records:
-            fhash = rec["metadata"].get("file_hash")
-            if fhash:
+            meta = rec["metadata"]
+            fhash = meta.get("file_hash")
+            if not fhash:
+                continue
+                
+            if not docs[fhash]["file_hash"]:
                 docs[fhash]["file_hash"] = fhash
-                docs[fhash]["filename"] = rec["metadata"].get("source_file", "unknown")
-                docs[fhash]["chunk_count"] += 1
-                docs[fhash]["uploaded_at"] = rec["metadata"].get("uploaded_at", "N/A")
-        
+                docs[fhash]["filename"] = meta.get("source_file", "unknown.pdf")
+                docs[fhash]["uploaded_at"] = meta.get("uploaded_at", "N/A")
+            
+            docs[fhash]["chunk_count"] += 1
+
         return list(docs.values())
