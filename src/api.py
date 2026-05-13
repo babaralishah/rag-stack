@@ -147,15 +147,14 @@ async def upload_pdf(file: UploadFile = File(...)):
 
 @app.post("/query", response_model=QueryResponse)
 def query(req: QueryRequest):
-    """Main query endpoint with caching"""
     q = req.question.strip()
     if not q:
         raise HTTPException(status_code=400, detail="Question cannot be empty.")
 
-    # Generate cache key manually and check cache first
-    from src.cache import query_cache, generate_cache_key
-    
-    cache_key = generate_cache_key(
+    from src.cache import get_cache_key, query_cache
+
+    # Check Cache
+    cache_key = get_cache_key(
         question=q,
         use_hybrid=getattr(req, 'use_hybrid', True),
         use_reranker=getattr(req, 'use_reranker', True),
@@ -164,19 +163,18 @@ def query(req: QueryRequest):
 
     if cache_key in query_cache:
         logger.info(f"🔄 QUERY CACHE HIT: {q[:70]}...")
-        cached_result = query_cache[cache_key]
-        return QueryResponse(answer=cached_result["answer"], sources=cached_result.get("sources", []))
+        cached = query_cache[cache_key]
+        return QueryResponse(answer=cached["answer"], sources=cached.get("sources", []))
 
-    # === No cache hit → Normal flow ===
+    # === Normal Flow ===
     try:
-        # Query Rewriting
         from src.query_rewriter import rewrite_query
         rewritten_query = rewrite_query(q)
 
         emb = get_embedder()
-        
         index_path = STORE_DIR / "index.faiss"
         meta_path = STORE_DIR / "meta.jsonl"
+
         if not index_path.exists() or not meta_path.exists():
             return QueryResponse(answer="No documents indexed yet. Upload a PDF first.", sources=[])
 
@@ -186,8 +184,8 @@ def query(req: QueryRequest):
         retrieve_k = RERANKER_TOP_K if getattr(req, 'use_reranker', True) else req.top_k
 
         retrieved = store.search(
-            query_vec=qv, 
-            top_k=retrieve_k, 
+            query_vec=qv,
+            top_k=retrieve_k,
             use_hybrid=getattr(req, 'use_hybrid', True)
         )
 
@@ -199,17 +197,17 @@ def query(req: QueryRequest):
             final_top_k=req.top_k
         )
 
-        result = {"answer": out["answer"], "sources": out["sources"]}
+        result = {"answer": out["answer"], "sources": out.get("sources", [])}
 
-        # Cache the result
+        # Save to cache
         query_cache[cache_key] = result
         logger.info(f"✅ Query cached: {q[:60]}...")
 
         return QueryResponse(answer=out["answer"], sources=out["sources"])
 
     except Exception as e:
-        logger.exception("Query processing failed")
-        raise HTTPException(status_code=500, detail="Internal server error")
+        logger.exception("Query failed")
+        raise HTTPException(status_code=500, detail="Internal error")
 
 class DocumentResponse(BaseModel):
     file_hash: str
