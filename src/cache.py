@@ -7,7 +7,7 @@ from typing import Dict
 
 logger = logging.getLogger("rag")
 
-# Caches
+# ==================== CACHES ====================
 embedding_cache = TTLCache(maxsize=1000, ttl=3600)
 query_cache = TTLCache(maxsize=500, ttl=1800)
 
