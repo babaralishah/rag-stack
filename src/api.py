@@ -12,7 +12,7 @@ logging.basicConfig(
 logger = logging.getLogger("rag")
 logger.setLevel(logging.INFO)
 
-from src.cache import cache_query, get_cache_stats, clear_all_caches
+from src.cache import get_cache_stats, clear_all_caches
 
 from pathlib import Path
 from typing import Optional, List, Dict, Any

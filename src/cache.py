@@ -3,13 +3,13 @@ import hashlib
 import json
 from datetime import datetime
 from cachetools import TTLCache
-from typing import Dict, Any
+from typing import Dict
 
 logger = logging.getLogger("rag")
 
-# ==================== CACHES ====================
-embedding_cache = TTLCache(maxsize=1000, ttl=3600)   # 1 hour
-query_cache = TTLCache(maxsize=500, ttl=1800)         # 30 minutes
+# Caches
+embedding_cache = TTLCache(maxsize=1000, ttl=3600)
+query_cache = TTLCache(maxsize=500, ttl=1800)
 
 cache_stats = {
     "embedding_hits": 0,
