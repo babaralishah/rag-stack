@@ -33,43 +33,39 @@ with st.sidebar:
                 except Exception as e:
                     st.error(f"❌ Upload failed: {e}")
 
-# ==================== DOCUMENT MANAGEMENT ====================
+    # ==================== UPLOADED DOCUMENTS ====================
     st.divider()
     st.subheader("📚 Uploaded Documents")
 
     try:
-        docs_response = requests.get(f"{API_BASE_URL}/documents", timeout=15)
-        
+        docs_response = requests.get(f"{API_BASE_URL}/documents", timeout=10)
         if docs_response.status_code == 200:
             documents = docs_response.json()
 
             if documents:
                 for doc in documents:
                     with st.expander(f"📄 {doc['filename']}", expanded=False):
-                        st.caption(f"**Chunks:** {doc['chunk_count']} | **Hash:** {doc['file_hash'][:8]}...")
-                        
-                        col1, col2 = st.columns([3, 1])
-                        with col1:
-                            st.caption(f"Uploaded: {doc.get('uploaded_at', 'N/A')}")
-                        with col2:
-                            if st.button("🗑️ Delete", key=f"del_{doc['file_hash']}", use_container_width=True):
+                        st.caption(f"**Chunks:** {doc['chunk_count']} | **ID:** {doc['file_hash'][:8]}...")
+                        st.caption(f"Uploaded: {doc.get('uploaded_at', 'N/A')}")
+
+                        if st.button("🗑️ Delete Document", key=f"del_{doc['file_hash']}", type="secondary"):
+                            if st.warning("Are you sure you want to delete this document? This action cannot be undone."):
                                 try:
-                                    with st.spinner("Deleting..."):
+                                    with st.spinner("Deleting document..."):
                                         del_resp = requests.delete(f"{API_BASE_URL}/documents/{doc['file_hash']}")
                                         if del_resp.status_code == 200:
-                                            st.success("Document deleted successfully!")
+                                            st.success("✅ Document deleted successfully!")
                                             st.rerun()
                                         else:
-                                            st.error("Failed to delete document")
+                                            st.error("Failed to delete")
                                 except Exception as e:
                                     st.error(f"Error: {e}")
             else:
-                st.info("No documents uploaded yet.")
+                st.info("No documents uploaded yet. Upload some PDFs to get started!")
         else:
-            st.warning("Could not load documents list.")
-            
+            st.warning("Could not load documents.")
     except Exception as e:
-        st.error(f"Failed to fetch documents: {str(e)}")
+        st.error(f"Failed to load documents: {e}")
             
     # ==================== SETTINGS ====================
     st.divider()
