@@ -22,16 +22,16 @@ with st.sidebar:
     uploaded_file = st.file_uploader("Choose a PDF file", type=["pdf"], key="pdf_uploader")
 
     if uploaded_file is not None:
-        with st.spinner("Uploading and indexing..."):
-            try:
-                files = {"file": (uploaded_file.name, uploaded_file.getvalue(), "application/pdf")}
-                response = requests.post(f"{API_BASE_URL}/upload", files=files, timeout=180)
-                response.raise_for_status()
-                result = response.json()
-                st.success(f"✅ **{uploaded_file.name}** uploaded successfully!")
-                st.rerun()   # Refresh to show in documents list
-            except Exception as e:
-                st.error(f"❌ Upload failed: {e}")
+        if st.button("🚀 Upload Document", type="primary"):
+            with st.spinner("Uploading and indexing document..."):
+                try:
+                    files = {"file": (uploaded_file.name, uploaded_file.getvalue(), "application/pdf")}
+                    response = requests.post(f"{API_BASE_URL}/upload", files=files, timeout=180)
+                    response.raise_for_status()
+                    st.success(f"✅ **{uploaded_file.name}** uploaded successfully!")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"❌ Upload failed: {e}")
 
 # ==================== DOCUMENT MANAGEMENT ====================
     st.divider()
