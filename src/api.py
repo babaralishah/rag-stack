@@ -166,7 +166,7 @@ def query(req: QueryRequest):
         cached = query_cache[cache_key]
         return QueryResponse(answer=cached["answer"], sources=cached.get("sources", []))
 
-    # === Normal Flow ===
+    # Normal processing
     try:
         from src.query_rewriter import rewrite_query
         rewritten_query = rewrite_query(q)
@@ -198,16 +198,14 @@ def query(req: QueryRequest):
         )
 
         result = {"answer": out["answer"], "sources": out.get("sources", [])}
-
-        # Save to cache
         query_cache[cache_key] = result
-        logger.info(f"✅ Query cached: {q[:60]}...")
 
+        logger.info(f"✅ Query cached: {q[:60]}...")
         return QueryResponse(answer=out["answer"], sources=out["sources"])
 
     except Exception as e:
         logger.exception("Query failed")
-        raise HTTPException(status_code=500, detail="Internal error")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 class DocumentResponse(BaseModel):
     file_hash: str
