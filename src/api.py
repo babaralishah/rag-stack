@@ -151,7 +151,7 @@ def query(req: QueryRequest):
     if not q:
         raise HTTPException(status_code=400, detail="Question cannot be empty.")
 
-    from src.cache import get_cache_key, query_cache
+    from src.cache import get_cache_key, get_cached_query, set_cached_query
 
     # Check Cache
     cache_key = get_cache_key(
@@ -161,9 +161,9 @@ def query(req: QueryRequest):
         top_k=req.top_k
     )
 
-    if cache_key in query_cache:
+    cached = get_cached_query(cache_key)
+    if cached is not None:
         logger.info(f"🔄 QUERY CACHE HIT: {q[:70]}...")
-        cached = query_cache[cache_key]
         return QueryResponse(answer=cached["answer"], sources=cached.get("sources", []))
 
     # Normal processing
@@ -198,7 +198,7 @@ def query(req: QueryRequest):
         )
 
         result = {"answer": out["answer"], "sources": out.get("sources", [])}
-        query_cache[cache_key] = result
+        set_cached_query(cache_key, result)
 
         logger.info(f"✅ Query cached: {q[:60]}...")
         return QueryResponse(answer=out["answer"], sources=out["sources"])

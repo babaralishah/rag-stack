@@ -96,7 +96,7 @@ with st.sidebar:
                 st.metric("Query Hit Rate", f"{stats.get('query_hit_rate', 0)}%")
                 st.metric("Embedding Hit Rate", f"{stats.get('embedding_hit_rate', 0)}%")
             with col2:
-                st.metric("Cached Queries", stats.get('query_entries', 0))
+                st.metric("Distinct Cached Queries", stats.get('query_entries', 0))
                 st.metric("Cached Embeddings", stats.get('embedding_entries', 0))
             
             st.caption(f"Last cleared: {stats.get('last_cleared', 'N/A')}")

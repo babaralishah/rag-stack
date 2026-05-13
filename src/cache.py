@@ -37,6 +37,20 @@ def clear_all_caches(reason="manual"):
     logger.info(f"🧹 All caches cleared. Reason: {reason}")
 
 
+def get_cached_query(key):
+    if key in query_cache:
+        cache_stats["query_hits"] += 1
+        return query_cache[key]
+
+    cache_stats["query_misses"] += 1
+    return None
+
+
+def set_cached_query(key, value):
+    query_cache[key] = value
+    return value
+
+
 def get_cache_stats() -> Dict:
     total_emb = cache_stats["embedding_hits"] + cache_stats["embedding_misses"]
     total_q = cache_stats["query_hits"] + cache_stats["query_misses"]
