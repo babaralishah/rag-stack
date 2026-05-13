@@ -30,14 +30,6 @@ def get_cache_key(question: str, use_hybrid=True, use_reranker=True, top_k=6):
     return hashlib.md5(json.dumps(data, sort_keys=True).encode()).hexdigest()
 
 
-def cache_embedding(key: str, embedding=None):
-    """Get or set a cached embedding using the shared embedding cache."""
-    if embedding is None:
-        return embedding_cache.get(key)
-    embedding_cache[key] = embedding
-    return embedding
-
-
 def clear_all_caches(reason="manual"):
     embedding_cache.clear()
     query_cache.clear()
