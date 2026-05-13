@@ -81,6 +81,39 @@ with st.sidebar:
 
     top_k = st.slider("Number of chunks to retrieve", 
                       min_value=3, max_value=15, value=6, step=1)
+
+    # ==================== CACHE STATUS ====================
+    st.divider()
+    st.subheader("⚡ Cache Status")
+
+    try:
+        cache_response = requests.get(f"{API_BASE_URL}/cache/stats", timeout=8)
+        if cache_response.status_code == 200:
+            stats = cache_response.json()
+            
+            col1, col2 = st.columns(2)
+            with col1:
+                st.metric("Query Hit Rate", f"{stats.get('query_hit_rate', 0)}%")
+                st.metric("Embedding Hit Rate", f"{stats.get('embedding_hit_rate', 0)}%")
+            with col2:
+                st.metric("Cached Queries", stats.get('query_entries', 0))
+                st.metric("Cached Embeddings", stats.get('embedding_entries', 0))
+            
+            st.caption(f"Last cleared: {stats.get('last_cleared', 'N/A')}")
+            
+            if st.button("🧹 Clear All Caches"):
+                try:
+                    clear_resp = requests.post(f"{API_BASE_URL}/cache/clear")
+                    if clear_resp.status_code == 200:
+                        st.success("Caches cleared successfully!")
+                        st.rerun()
+                except Exception as e:
+                    st.error(f"Failed to clear cache: {e}")
+        else:
+            st.info("Cache stats not available yet.")
+    except Exception as e:
+        st.caption("Cache monitoring unavailable")
+
     
 # --------------------- Main Area ---------------------
 st.title("📚 RAG Assistant")

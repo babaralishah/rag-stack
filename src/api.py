@@ -12,6 +12,8 @@ logging.basicConfig(
 logger = logging.getLogger("rag")
 logger.setLevel(logging.INFO)
 
+from src.cache import cache_query, get_cache_stats, clear_all_caches
+
 from pathlib import Path
 from typing import Optional, List, Dict, Any
     
@@ -135,7 +137,7 @@ async def upload_pdf(file: UploadFile = File(...)):
         store = load_or_create_store(dim=emb.shape[1])
         store.add(emb, texts, metas)
         store.save()
-
+        clear_all_caches()
         return {"status": "ingested", "file": file.filename, "chunks_added": len(texts)}
     except HTTPException:
         raise
@@ -144,6 +146,7 @@ async def upload_pdf(file: UploadFile = File(...)):
         raise HTTPException(status_code=500, detail="Indexing failed. Check server logs.")
 
 @app.post("/query", response_model=QueryResponse)
+@cache_query
 def query(req: QueryRequest):
     q = req.question.strip()
     if not q:
@@ -212,6 +215,7 @@ def delete_document(file_hash: str):
         
         if deleted > 0:
             store.save()
+            clear_all_caches()
             return {"status": "success", "message": f"Deleted {deleted} chunks"}
         else:
             raise HTTPException(status_code=404, detail="Document not found")
@@ -219,3 +223,22 @@ def delete_document(file_hash: str):
     except Exception as e:
         logger.error(f"Delete failed: {e}")
         raise HTTPException(status_code=500, detail="Failed to delete document")
+
+@app.get("/cache/stats")
+def get_cache_statistics():
+    """Return cache statistics for monitoring"""
+    try:
+        return get_cache_stats()
+    except Exception as e:
+        logger.error(f"Cache stats error: {e}")
+        return {"error": str(e)}
+
+@app.post("/cache/clear")
+def clear_cache_endpoint():
+    """Manual cache clear"""
+    try:
+        clear_all_caches(reason="manual_user_request")
+        return {"status": "success", "message": "All caches cleared"}
+    except Exception as e:
+        logger.error(f"Cache clear failed: {e}")
+        raise HTTPException(status_code=500, detail="Failed to clear cache")
