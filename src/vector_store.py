@@ -235,3 +235,18 @@ class FaissVectorStore:
 
         logger.info(f"✅ Deleted {deleted_count} chunks for file_hash: {file_hash}")
         return deleted_count
+    
+    def get_all_documents(self) -> List[Dict]:
+        """Return list of unique documents"""
+        from collections import defaultdict
+        docs = defaultdict(lambda: {"chunk_count": 0})
+        
+        for rec in self.records:
+            fhash = rec["metadata"].get("file_hash")
+            if fhash:
+                docs[fhash]["file_hash"] = fhash
+                docs[fhash]["filename"] = rec["metadata"].get("source_file", "unknown")
+                docs[fhash]["chunk_count"] += 1
+                docs[fhash]["uploaded_at"] = rec["metadata"].get("uploaded_at", "N/A")
+        
+        return list(docs.values())
