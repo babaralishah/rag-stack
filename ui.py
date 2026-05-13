@@ -27,36 +27,58 @@ with st.sidebar:
                 files = {"file": (uploaded_file.name, uploaded_file.getvalue(), "application/pdf")}
                 response = requests.post(f"{API_BASE_URL}/upload", files=files, timeout=180)
                 response.raise_for_status()
-                
                 result = response.json()
-                st.success(f"✅ Successfully uploaded: **{uploaded_file.name}**")
-                
-            except requests.exceptions.RequestException as e:
-                st.error(f"❌ Upload failed: {e}")
+                st.success(f"✅ Uploaded: **{uploaded_file.name}**")
+            except Exception as e:
+                st.error(f"Upload failed: {e}")
 
+# ==================== DOCUMENT MANAGEMENT ====================
     st.divider()
-    
-    # ==================== SETTINGS ====================
-    st.markdown("### ⚙️ Settings")
-    
-    # Re-ranking Toggle
-    use_reranker = st.checkbox(
-        "Enable Re-ranking", 
-        value=True,
-        help="Uses CrossEncoder reranker + score fusion for better relevance. Recommended."
-    )
-    
-    # Optional: Top-K slider
-    top_k = st.slider(
-        "Number of chunks to retrieve", 
-        min_value=1, 
-        max_value=15, 
-        value=TOP_K, 
-        step=1,
-        help="Higher value = more context but slower"
-    )
+    st.subheader("📚 Uploaded Documents")
 
-    st.caption("Re-ranking improves answer quality but adds slight latency.")
+    try:
+        docs_response = requests.get(f"{API_BASE_URL}/documents", timeout=10)
+        if docs_response.status_code == 200:
+            documents = docs_response.json()
+
+            if documents:
+                for doc in documents:
+                    with st.container(border=True):
+                        col1, col2 = st.columns([4, 1])
+                        with col1:
+                            st.markdown(f"**{doc['filename']}**")
+                            st.caption(f"{doc['chunk_count']} chunks • {doc.get('uploaded_at', 'N/A')}")
+                        with col2:
+                            if st.button("🗑️", key=f"del_{doc['file_hash']}", help="Delete document"):
+                                try:
+                                    del_resp = requests.delete(f"{API_BASE_URL}/documents/{doc['file_hash']}")
+                                    if del_resp.status_code == 200:
+                                        st.success("Document deleted!")
+                                        st.rerun()
+                                    else:
+                                        st.error("Failed to delete")
+                                except Exception as e:
+                                    st.error(f"Error: {e}")
+            else:
+                st.info("No documents uploaded yet.")
+        else:
+            st.warning("Could not fetch documents list.")
+    except Exception as e:
+        st.error(f"Failed to load documents: {e}")
+            
+    # ==================== SETTINGS ====================
+    st.divider()
+    st.subheader("⚙️ Settings")
+
+    use_reranker = st.checkbox("Enable Re-ranking", value=True, 
+                              help="Improves answer quality but adds slight latency")
+    
+    use_hybrid = st.checkbox("Enable Hybrid Search", value=True,
+                            help="Combines Semantic + Keyword (BM25) search")
+
+    top_k = st.slider("Number of chunks to retrieve", 
+                      min_value=3, max_value=15, value=5, 
+                      help="Higher = more context, but slower")
     
 # --------------------- Main Area ---------------------
 st.title("📚 RAG Assistant")

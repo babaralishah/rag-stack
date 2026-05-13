@@ -186,3 +186,52 @@ class FaissVectorStore:
         obj._build_bm25()
         logger.info(f"Loaded {obj.index.ntotal} vectors with BM25 index")
         return obj
+    
+    
+    def delete_by_file_hash(self, file_hash: str) -> int:
+        """Delete all chunks belonging to a specific file and rebuild index"""
+        if not file_hash:
+            return 0
+
+        # Keep only records that do NOT belong to this file
+        kept_records = [
+            rec for rec in self.records 
+            if rec["metadata"].get("file_hash") != file_hash
+        ]
+        
+        deleted_count = len(self.records) - len(kept_records)
+
+        if deleted_count == 0:
+            logger.info(f"No chunks found for file_hash: {file_hash}")
+            return 0
+
+        self.records = kept_records
+
+        # Rebuild FAISS index
+        if self.records:
+            try:
+                # Import here to avoid circular imports
+                from src.embedder import HFEmbedder
+                from src.config import EMBED_MODEL
+                
+                embedder = HFEmbedder(model_name=EMBED_MODEL)
+                texts = [r["text"] for r in self.records]
+                
+                embeddings = embedder.embed_texts(texts)
+                
+                self.index = faiss.IndexFlatIP(self.dim)
+                self.index.add(embeddings.astype("float32"))
+                
+                logger.info(f"Rebuilt FAISS index with {len(self.records)} chunks after deletion")
+            except Exception as e:
+                logger.error(f"Failed to rebuild FAISS index: {e}")
+                # Fallback: reset index
+                self.index = faiss.IndexFlatIP(self.dim)
+        else:
+            self.index = faiss.IndexFlatIP(self.dim)
+
+        # Rebuild BM25
+        self._build_bm25()
+
+        logger.info(f"✅ Deleted {deleted_count} chunks for file_hash: {file_hash}")
+        return deleted_count

@@ -185,3 +185,37 @@ def query(req: QueryRequest):
     )
 
     return QueryResponse(answer=out["answer"], sources=out["sources"])
+
+class DocumentResponse(BaseModel):
+    file_hash: str
+    filename: str
+    chunk_count: int
+    uploaded_at: str
+
+@app.get("/documents", response_model=List[DocumentResponse])
+def list_documents():
+    """List all uploaded documents"""
+    try:
+        store = load_or_create_store(dim=EMBED_DIM)
+        docs = store.get_all_documents()
+        return docs
+    except Exception as e:
+        logger.error(f"Failed to list documents: {e}")
+        return []
+
+@app.delete("/documents/{file_hash}")
+def delete_document(file_hash: str):
+    """Delete a document and its chunks"""
+    try:
+        store = load_or_create_store(dim=EMBED_DIM)
+        deleted = store.delete_by_file_hash(file_hash)
+        
+        if deleted > 0:
+            store.save()
+            return {"status": "success", "message": f"Deleted {deleted} chunks"}
+        else:
+            raise HTTPException(status_code=404, detail="Document not found")
+            
+    except Exception as e:
+        logger.error(f"Delete failed: {e}")
+        raise HTTPException(status_code=500, detail="Failed to delete document")
