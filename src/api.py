@@ -22,7 +22,7 @@ from pydantic import BaseModel
 
 import json
 
-from src.config import UPLOADS_DIR, STORE_DIR, EMBED_MODEL, EMBED_DIM, TOP_K, MIN_SCORE, CHUNK_SIZE, CHUNK_OVERLAP
+from src.config import RERANKER_TOP_K, UPLOADS_DIR, STORE_DIR, EMBED_MODEL, EMBED_DIM, TOP_K, MIN_SCORE, CHUNK_SIZE, CHUNK_OVERLAP
 from src.utils import file_sha256
 from src.document_loader import load_pdf
 from src.chunker import chunk_text
@@ -146,48 +146,70 @@ async def upload_pdf(file: UploadFile = File(...)):
         raise HTTPException(status_code=500, detail="Indexing failed. Check server logs.")
 
 @app.post("/query", response_model=QueryResponse)
-@cache_query
 def query(req: QueryRequest):
+    """Main query endpoint with caching"""
     q = req.question.strip()
     if not q:
         raise HTTPException(status_code=400, detail="Question cannot be empty.")
 
-    # === QUERY REWRITING ===
-    rewritten_query = rewrite_query(q)
-
-    emb = get_embedder()
+    # Generate cache key manually and check cache first
+    from src.cache import query_cache, generate_cache_key
     
-    # Ensure store exists
-    index_path = STORE_DIR / "index.faiss"
-    meta_path = STORE_DIR / "meta.jsonl"
-    if not index_path.exists() or not meta_path.exists():
-        return QueryResponse(answer="No documents indexed yet. Upload a PDF first.", sources=[])
-
-    store = load_or_create_store(dim=EMBED_DIM)
-    
-    # Use rewritten query for better retrieval
-    qv = emb.embed_query(rewritten_query)
-
-    from src.config import RERANKER_TOP_K
-
-    retrieve_k = RERANKER_TOP_K if req.use_reranker else req.top_k
-
-    retrieved = store.search(
-    query_vec=qv,
-    query_text=rewritten_query,
-    top_k=retrieve_k,
-    use_hybrid=True
+    cache_key = generate_cache_key(
+        question=q,
+        use_hybrid=getattr(req, 'use_hybrid', True),
+        use_reranker=getattr(req, 'use_reranker', True),
+        top_k=req.top_k
     )
 
-    out = rag_answer(
-        question=q,  # Keep original question for answer generation to LLM not rewritten question
-        retrieved=retrieved,
-        min_score=MIN_SCORE,
-        use_reranker=req.use_reranker,
-        final_top_k=req.top_k
-    )
+    if cache_key in query_cache:
+        logger.info(f"🔄 QUERY CACHE HIT: {q[:70]}...")
+        cached_result = query_cache[cache_key]
+        return QueryResponse(answer=cached_result["answer"], sources=cached_result.get("sources", []))
 
-    return QueryResponse(answer=out["answer"], sources=out["sources"])
+    # === No cache hit → Normal flow ===
+    try:
+        # Query Rewriting
+        from src.query_rewriter import rewrite_query
+        rewritten_query = rewrite_query(q)
+
+        emb = get_embedder()
+        
+        index_path = STORE_DIR / "index.faiss"
+        meta_path = STORE_DIR / "meta.jsonl"
+        if not index_path.exists() or not meta_path.exists():
+            return QueryResponse(answer="No documents indexed yet. Upload a PDF first.", sources=[])
+
+        store = load_or_create_store(dim=EMBED_DIM)
+        qv = emb.embed_query(rewritten_query)
+
+        retrieve_k = RERANKER_TOP_K if getattr(req, 'use_reranker', True) else req.top_k
+
+        retrieved = store.search(
+            query_vec=qv, 
+            top_k=retrieve_k, 
+            use_hybrid=getattr(req, 'use_hybrid', True)
+        )
+
+        out = rag_answer(
+            question=q,
+            retrieved=retrieved,
+            min_score=MIN_SCORE,
+            use_reranker=getattr(req, 'use_reranker', True),
+            final_top_k=req.top_k
+        )
+
+        result = {"answer": out["answer"], "sources": out["sources"]}
+
+        # Cache the result
+        query_cache[cache_key] = result
+        logger.info(f"✅ Query cached: {q[:60]}...")
+
+        return QueryResponse(answer=out["answer"], sources=out["sources"])
+
+    except Exception as e:
+        logger.exception("Query processing failed")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 class DocumentResponse(BaseModel):
     file_hash: str
