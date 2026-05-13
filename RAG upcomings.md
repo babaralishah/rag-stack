@@ -12,3 +12,12 @@
 10. **Advanced RAG** — Explore agentic patterns, query routing, and other advanced techniques
 11. **Custoimization** — Add toggle buttons in the UI for almost every feature, query-rewriting, reranking, hybrid-search, multi-llm 
 12. **Latency Optimization** — Do improve the code functions in order to reduce the latecny, try running a few things parallel where possible [Hypothetical Document Embeddings (HyDE)]
+
+
+### RAG focus summary:
+
+   1. Preparation: Slice data smartly (Recursive Chunking) so you search small but read big (Parent-Child Indexing).
+   2. Retrieval: Use Hybrid Search (Keywords + Meaning) and a Reranker to find the needle in the haystack.
+   3. Verification: Always measure the RAG Triad (Faithfulness, Relevance, and Precision) to prove the answer is a fact, not a hallucination.
+
+The Golden Rule: Search for Context, solve for Intent, and evaluate for Truth.
