@@ -35,26 +35,31 @@ def generate_answer(
     max_tokens: int = 1024
 ) -> str:
     """
-    Unified LLM caller supporting Groq and Google Gemini.
+    Unified LLM caller.
+    - Gemini is tried only if explicitly requested.
+    - Groq is used as default and fallback.
     """
     try:
-        # === GEMINI ROUTE ===
+        # === GEMINI ROUTE (Only if explicitly requested) ===
         if model.startswith("gemini"):
-            if not GEMINI_AVAILABLE or not client_gemini:
-                raise ValueError(f"Gemini model '{model}' requested but Gemini is not available.")
-            
-            response = client_gemini.models.generate_content(
-                model=model,
-                contents=prompt,
-                config=genai.types.GenerateContentConfig(
-                    temperature=temperature,
-                    max_output_tokens=max_tokens,
-                )
-            )
-            logger.info(f"Generated using Gemini: {model}")
-            return response.text.strip()
+            if GEMINI_AVAILABLE and client_gemini:
+                try:
+                    response = client_gemini.models.generate_content(
+                        model=model,
+                        contents=prompt,
+                        config=genai.types.GenerateContentConfig(
+                            temperature=temperature,
+                            max_output_tokens=max_tokens,
+                        )
+                    )
+                    logger.info(f"Generated using Gemini: {model}")
+                    return response.text.strip()
+                except Exception as gemini_error:
+                    logger.warning(f"Gemini failed: {gemini_error}. Falling back to Groq.")
+            else:
+                logger.warning(f"Gemini requested but not available. Falling back to Groq.")
 
-        # === GROQ ROUTE (Default) ===
+        # === GROQ ROUTE (Default + Fallback) ===
         client = get_groq_client()
         response = client.chat.completions.create(
             model=model,
