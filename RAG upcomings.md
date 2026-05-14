@@ -12,7 +12,7 @@
 10. **Advanced RAG** — Explore agentic patterns, query routing, and other advanced techniques
 11. **Custoimization** — Add toggle buttons in the UI for almost every feature, query-rewriting, reranking, hybrid-search, multi-llm 
 12. **Latency Optimization** — Do improve the code functions in order to reduce the latecny, try running a few things parallel where possible [Hypothetical Document Embeddings (HyDE)]
-
+13. **Multiple Data sources** — Read data from multile sources, wikipedia, database and others
 
 ### RAG focus summary:
 
