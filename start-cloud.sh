@@ -10,9 +10,4 @@ sleep 6
 
 # Start Streamlit on Cloud Run's required PORT
 echo "Starting Streamlit on port ${PORT:-8080}..."
-exec streamlit run ui.py \
-  --server.port ${PORT:-8080} \
-  --server.address 0.0.0.0 \
-  --server.enableCORS false \
-  --server.enableXsrfProtection false \
-  --logger.level error
+exec streamlit run ui.py   --server.port ${PORT:-8080}   --server.address 0.0.0.0   --server.enableCORS false   --server.enableXsrfProtection false
