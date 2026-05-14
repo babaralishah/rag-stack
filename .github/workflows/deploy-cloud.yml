@@ -34,7 +34,12 @@ jobs:
           flags: |
             --allow-unauthenticated
             --port=8080
-            --memory=2Gi
+            --memory=4Gi
             --cpu=2
+          secrets: |
+            GROQ_API_KEY=projects/${{ secrets.GCP_PROJECT_ID }}/secrets/GROQ_API_KEY:latest
+            GEMINI_API_KEY=projects/${{ secrets.GCP_PROJECT_ID }}/secrets/GEMINI_API_KEY:latest
           env_vars: |
             API_BASE_URL=http://127.0.0.1:8000
+            PYTHONDONTWRITEBYTECODE=1
+            PYTHONUNBUFFERED=1
