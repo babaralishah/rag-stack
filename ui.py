@@ -73,8 +73,8 @@ with st.sidebar:
 
     col_r1, col_r2 = st.columns(2)
     with col_r1:
-        use_reranker = st.checkbox("Enable Re-ranking", value=True, 
-                                  help="Improves relevance using CrossEncoder")
+        use_reranker = st.checkbox("Enable Re-ranking", value=False, 
+                                  help="Improves relevance using CrossEncoder (optional)")
     with col_r2:
         use_hybrid = st.checkbox("Enable Hybrid Search", value=True,
                                 help="Semantic + Keyword (BM25)")
