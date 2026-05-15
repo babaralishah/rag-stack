@@ -3,13 +3,16 @@ name: Deploy to Google Cloud Run
 on:
   push:
     branches:
-      - main
       - google-cloud-deployment
-  workflow_dispatch:  # Allows manual trigger from GitHub
+  workflow_dispatch:
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      id-token: write
 
     steps:
       - name: Checkout Code
@@ -26,20 +29,14 @@ jobs:
           project_id: ${{ secrets.GCP_PROJECT_ID }}
 
       - name: Deploy to Cloud Run
-        uses: google-github-actions/deploy-cloudrun@v2
-        with:
-          service: rag-llm-app
-          source: .
-          region: us-central1
-          flags: |
-            --allow-unauthenticated
-            --port=8080
-            --memory=4Gi
-            --cpu=2
-          secrets: |
-            GROQ_API_KEY=projects/${{ secrets.GCP_PROJECT_ID }}/secrets/GROQ_API_KEY:latest
-            GEMINI_API_KEY=projects/${{ secrets.GCP_PROJECT_ID }}/secrets/GEMINI_API_KEY:latest
-          env_vars: |
-            API_BASE_URL=http://127.0.0.1:8000
-            PYTHONDONTWRITEBYTECODE=1
-            PYTHONUNBUFFERED=1
+        run: |
+          gcloud run deploy rag-llm-app \
+            --source . \
+            --platform managed \
+            --region us-central1 \
+            --allow-unauthenticated \
+            --port 8080 \
+            --memory 4Gi \
+            --cpu 2 \
+            --set-env-vars API_BASE_URL=http://127.0.0.1:8000,PYTHONDONTWRITEBYTECODE=1,PYTHONUNBUFFERED=1 \
+            --set-secrets GROQ_API_KEY=GROQ_API_KEY:latest,GEMINI_API_KEY=GEMINI_API_KEY:latest
