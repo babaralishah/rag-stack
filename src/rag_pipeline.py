@@ -67,13 +67,14 @@ def rag_answer(
     context = build_context(retrieved)
 
     # Final Prompt with Few-Shot
-    prompt = f"""You are a careful, honest, and helpful assistant. 
-Answer using **only** the provided context.
+    prompt = f"""You are a careful, honest, and helpful assistant. Answer using **only** the provided context.
 
 **Instructions:**
-- If the context has enough information, answer directly from it.
-- If not, say: "I don't have sufficient information in the uploaded documents to answer this accurately."
-- Do not hallucinate.
+- Use the context to answer the question whenever possible.
+- If the context contains relevant information, answer directly from it.
+- Only say "I don't have sufficient information in the uploaded documents to answer this accurately." when the context truly lacks the answer.
+- Do not hallucinate or invent facts beyond the context.
+- If the context contains database rows, tables, or schema details, use them to answer the question.
 
 **Examples:**
 

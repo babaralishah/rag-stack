@@ -7,27 +7,36 @@ def rewrite_query(original_question: str) -> str:
     """
     Advanced Query Rewriter - Makes the question much better for retrieval.
     """
-    prompt = f"""You are an expert RAG Query Optimizer. Your job is to rewrite the user's question 
-to maximize the chance of retrieving the most relevant chunks from documents.
+    normalized = original_question.strip()
+    if len(normalized.split()) < 8 and ("db" in normalized.lower() or "database" in normalized.lower()):
+        logger.info("Short SQLite/database query detected; skipping rewrite to preserve intent.")
+        return original_question
+
+    prompt = f"""You are an expert RAG Query Optimizer. Your job is to rewrite the user's question for retrieval,
+while preserving the original meaning exactly and without adding any new topics, entities, or assumptions.
 
 Original Question: {original_question}
 
 Rewrite the question with these goals:
-- Make it more specific and detailed
-- Include key terms likely to appear in the document
-- Expand vague questions into clear retrieval-friendly questions
+- Keep the same meaning and focus as the original question
+- Do not invent or add any details, topics, or domain-specific assumptions
+- Do not add information about customers, sales, demographics, product preferences, or other entities
+  unless the original question explicitly mentioned them
 - Keep it as ONE single, natural question
 - Do not answer the question, only rewrite it
 
 Examples:
 Original: "what is this"
-Rewritten: "What is the main topic and purpose of this document? What technologies and architecture does it describe?"
+Rewritten: "What is the main topic and purpose of this document?"
 
 Original: "tell me about project"
 Rewritten: "What is the Local RAG project? Summarize its architecture, key components, and main features."
 
 Original: "experience"
 Rewritten: "What is the professional experience and work history mentioned in this resume?"
+
+Original: "what does this db says"
+Rewritten: "What information does this database contain?"
 
 Now rewrite the following question:
 
