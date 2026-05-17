@@ -264,7 +264,8 @@ if question:
             payload = {
             "question": question, 
             "top_k": top_k,           # Use the slider value
-            "use_reranker": use_reranker   # Send the checkbox value
+            "use_reranker": use_reranker,  # Send the checkbox value
+            "use_hybrid": use_hybrid       # Send hybrid search setting
         }
             r = requests.post(f"{API_BASE_URL}/query", json=payload, timeout=180)
             r.raise_for_status()

@@ -363,6 +363,8 @@ def query(req: QueryRequest):
         store = load_or_create_store(dim=EMBED_DIM)
         qv = emb.embed_query(rewritten_query)
 
+        # If reranking is enabled, retrieve more candidates (RERANKER_TOP_K) for better ranking
+        # Then rag_answer will keep only the user's requested top_k after reranking
         retrieve_k = RERANKER_TOP_K if getattr(req, 'use_reranker', True) else req.top_k
 
         retrieved = store.search(
@@ -372,12 +374,14 @@ def query(req: QueryRequest):
             use_hybrid=getattr(req, 'use_hybrid', True)
         )
 
+        logger.info(f"Retrieved {len(retrieved)} chunks, user requested top_k={req.top_k}, reranking={'enabled' if getattr(req, 'use_reranker', True) else 'disabled'}")
+
         out = rag_answer(
             question=q,
             retrieved=retrieved,
             min_score=MIN_SCORE,
             use_reranker=getattr(req, 'use_reranker', True),
-            final_top_k=req.top_k
+            final_top_k=req.top_k  # This ensures exactly top_k results after reranking
         )
 
         result = {"answer": out["answer"], "sources": out.get("sources", [])}
