@@ -80,6 +80,27 @@ with st.sidebar:
             except Exception as e:
                 st.error(f"❌ YouTube ingestion failed: {format_api_error(e)}")
 
+    st.caption("If YouTube auto-fetch is blocked, paste the transcript or text manually below.")
+    manual_source_name = st.text_input("Manual source label", value="Manual transcript", key="manual_source_name")
+    manual_text = st.text_area("Paste raw transcript or text to index", key="manual_text", height=180)
+    if manual_text and st.button("📥 Ingest Manual Transcript", key="ingest_manual_text"):
+        with st.spinner("Indexing manual transcript..."):
+            try:
+                response = requests.post(
+                    f"{API_BASE_URL}/ingest/text",
+                    data={
+                        "content": manual_text,
+                        "source_name": manual_source_name,
+                        "source_type": "youtube_transcript"
+                    },
+                    timeout=180
+                )
+                response.raise_for_status()
+                st.success("✅ Manual transcript ingested successfully!")
+                st.rerun()
+            except Exception as e:
+                st.error(f"❌ Manual transcript ingestion failed: {format_api_error(e)}")
+
     st.divider()
     st.subheader("🗄️ Local SQLite Database")
     sqlite_file = st.file_uploader("Upload a local SQLite .db file", type=["db", "sqlite"], key="sqlite_uploader")

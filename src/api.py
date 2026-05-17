@@ -235,6 +235,32 @@ def ingest_youtube(url: HttpUrl = Form(...)):
         raise HTTPException(status_code=500, detail="Failed to ingest YouTube source.")
 
 
+@app.post("/ingest/text")
+def ingest_text(
+    content: str = Form(...),
+    source_name: str = Form("manual_text"),
+    source_type: str = Form("text")
+):
+    if not content.strip():
+        raise HTTPException(status_code=400, detail="Content cannot be empty.")
+
+    pages = [{
+        "text": content,
+        "metadata": {
+            "source_url": source_name,
+            "source_type": source_type,
+        }
+    }]
+
+    source_hash = compute_source_hash(source_name + content[:1000])
+    return ingest_pages(
+        pages,
+        source_file=source_name,
+        source_type=source_type,
+        source_hash=source_hash
+    )
+
+
 @app.post("/ingest/sqlite")
 async def ingest_sqlite(file: UploadFile = File(...), table_name: str = Form("user_history")):
     if not file.filename.lower().endswith((".db", ".sqlite")):
