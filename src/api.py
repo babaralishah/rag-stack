@@ -272,6 +272,7 @@ async def ingest_sqlite(file: UploadFile = File(...), table_name: str = Form("us
         logger.exception("Failed reading SQLite upload: %s", e)
         raise HTTPException(status_code=500, detail="Could not read SQLite upload.")
 
+    UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
     temp_path = UPLOADS_DIR / file.filename
     temp_path.write_bytes(content)
 
