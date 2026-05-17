@@ -32,7 +32,12 @@ from src.embedder import HFEmbedder
 from src.vector_store import FaissVectorStore
 from src.rag_pipeline import rag_answer
 from src.query_rewriter import rewrite_query
-from src.source_loader import fetch_web_text, fetch_youtube_transcript, load_sqlite_table
+from src.source_loader import (
+    fetch_web_text,
+    fetch_youtube_transcript,
+    load_sqlite_table,
+    get_sqlite_table_names,
+)
 
 app = FastAPI(title="Local RAG API", version="0.1")
 
@@ -277,6 +282,10 @@ async def ingest_sqlite(file: UploadFile = File(...), table_name: str = Form("us
     temp_path.write_bytes(content)
 
     try:
+        if not table_name.strip():
+            detected_tables = get_sqlite_table_names(str(temp_path))
+            table_name = detected_tables[0]
+
         pages = load_sqlite_table(str(temp_path), table_name=table_name)
         source_hash = compute_source_hash(str(file.filename) + table_name)
         result = ingest_pages(
@@ -291,6 +300,31 @@ async def ingest_sqlite(file: UploadFile = File(...), table_name: str = Form("us
     except Exception as e:
         logger.exception("SQLite ingestion failed: %s", e)
         raise HTTPException(status_code=500, detail="Failed to ingest SQLite source.")
+
+
+@app.post("/ingest/sqlite/tables")
+async def list_sqlite_tables(file: UploadFile = File(...)):
+    if not file.filename.lower().endswith((".db", ".sqlite")):
+        raise HTTPException(status_code=400, detail="Upload a .db or .sqlite file.")
+
+    try:
+        content = await file.read()
+    except Exception as e:
+        logger.exception("Failed reading SQLite upload for table discovery: %s", e)
+        raise HTTPException(status_code=500, detail="Could not read SQLite upload.")
+
+    UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
+    temp_path = UPLOADS_DIR / file.filename
+    temp_path.write_bytes(content)
+
+    try:
+        tables = get_sqlite_table_names(str(temp_path))
+        return {"tables": tables}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.exception("SQLite table discovery failed: %s", e)
+        raise HTTPException(status_code=500, detail="Failed to inspect SQLite tables.")
 
 
 @app.post("/query", response_model=QueryResponse)

@@ -149,3 +149,24 @@ def load_sqlite_table(db_path: str, table_name: str = "user_history") -> List[Di
         })
 
     return pages
+
+
+def get_sqlite_table_names(db_path: str) -> List[str]:
+    if not db_path:
+        raise ValueError("SQLite database path is required.")
+
+    db_file = Path(db_path)
+    if not db_file.exists():
+        raise ValueError("SQLite database file not found.")
+
+    with sqlite3.connect(str(db_file)) as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name"
+        )
+        tables = [row[0] for row in cursor.fetchall()]
+
+    if not tables:
+        raise ValueError("No tables found in the SQLite database.")
+
+    return tables

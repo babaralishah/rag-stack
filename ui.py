@@ -104,7 +104,37 @@ with st.sidebar:
     st.divider()
     st.subheader("🗄️ Local SQLite Database")
     sqlite_file = st.file_uploader("Upload a local SQLite .db file", type=["db", "sqlite"], key="sqlite_uploader")
-    sqlite_table = st.text_input("Table name to ingest", value="user_history", key="sqlite_table")
+    sqlite_table = "user_history"
+    detected_tables = []
+
+    if sqlite_file is not None:
+        with st.spinner("Inspecting SQLite file for tables..."):
+            try:
+                files = {"file": (sqlite_file.name, sqlite_file.getvalue(), "application/octet-stream")}
+                response = requests.post(
+                    f"{API_BASE_URL}/ingest/sqlite/tables",
+                    files=files,
+                    timeout=60
+                )
+                response.raise_for_status()
+                detected_tables = response.json().get("tables", [])
+            except Exception as e:
+                st.warning(f"⚠️ Could not detect table names: {format_api_error(e)}")
+
+    if detected_tables:
+        sqlite_table = st.selectbox(
+            "Select a table to ingest",
+            options=detected_tables,
+            index=0,
+            key="sqlite_table_select"
+        )
+        st.caption("If the table you want is missing, upload a different SQLite file or enter the table name manually below.")
+        manual_table = st.text_input("Or enter a different table name", value=sqlite_table, key="sqlite_table_manual")
+        if manual_table.strip():
+            sqlite_table = manual_table.strip()
+    else:
+        sqlite_table = st.text_input("Table name to ingest", value="user_history", key="sqlite_table")
+
     if sqlite_file is not None and st.button("📥 Ingest SQLite Table", key="ingest_sqlite"):
         with st.spinner("Reading SQLite table and indexing..."):
             try:
