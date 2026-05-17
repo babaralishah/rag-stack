@@ -16,14 +16,18 @@ API_BASE_URL = os.getenv("API_BASE_URL", "http://127.0.0.1:8000")
 
 # --------------------- Sidebar ---------------------
 with st.sidebar:
-    st.header("📄 Document Upload")
-    st.caption("Upload PDFs to build your knowledge base")
+    st.header("📄 Document & Code Upload")
+    st.caption("Upload PDFs, Markdown, or code files to expand your knowledge base")
 
-    uploaded_file = st.file_uploader("Choose a PDF file", type=["pdf"], key="pdf_uploader")
+    uploaded_file = st.file_uploader(
+        "Choose a file to ingest",
+        type=["pdf", "md", "txt", "py", "js", "ts", "json", "csv"],
+        key="pdf_uploader"
+    )
 
     if uploaded_file is not None:
-        if st.button("🚀 Upload Document", type="primary"):
-            with st.spinner("Uploading and indexing document..."):
+        if st.button("🚀 Upload Source File", type="primary"):
+            with st.spinner("Uploading and indexing source file..."):
                 try:
                     files = {"file": (uploaded_file.name, uploaded_file.getvalue(), "application/pdf")}
                     response = requests.post(f"{API_BASE_URL}/upload", files=files, timeout=180)
@@ -33,7 +37,61 @@ with st.sidebar:
                 except Exception as e:
                     st.error(f"❌ Upload failed: {e}")
 
-    # ==================== UPLOADED DOCUMENTS ====================
+    st.divider()
+    st.subheader("🌐 Live Web Articles")
+    web_url = st.text_input("Enter a URL to ingest an article", key="web_url")
+    if web_url and st.button("📥 Ingest Web Source", key="ingest_web"):
+        with st.spinner("Fetching and indexing web content..."):
+            try:
+                response = requests.post(
+                    f"{API_BASE_URL}/ingest/url",
+                    data={"url": web_url},
+                    timeout=180
+                )
+                response.raise_for_status()
+                st.success("✅ Web source ingested successfully!")
+                st.rerun()
+            except Exception as e:
+                st.error(f"❌ Web ingestion failed: {e}")
+
+    st.divider()
+    st.subheader("🔊 YouTube / Video Transcript")
+    youtube_url = st.text_input("Enter a YouTube video link", key="youtube_url")
+    if youtube_url and st.button("📥 Ingest YouTube Transcript", key="ingest_youtube"):
+        with st.spinner("Fetching video transcript..."):
+            try:
+                response = requests.post(
+                    f"{API_BASE_URL}/ingest/youtube",
+                    data={"url": youtube_url},
+                    timeout=180
+                )
+                response.raise_for_status()
+                st.success("✅ YouTube transcript ingested successfully!")
+                st.rerun()
+            except Exception as e:
+                st.error(f"❌ YouTube ingestion failed: {e}")
+
+    st.divider()
+    st.subheader("🗄️ Local SQLite Database")
+    sqlite_file = st.file_uploader("Upload a local SQLite .db file", type=["db", "sqlite"], key="sqlite_uploader")
+    sqlite_table = st.text_input("Table name to ingest", value="user_history", key="sqlite_table")
+    if sqlite_file is not None and st.button("📥 Ingest SQLite Table", key="ingest_sqlite"):
+        with st.spinner("Reading SQLite table and indexing..."):
+            try:
+                files = {"file": (sqlite_file.name, sqlite_file.getvalue(), "application/octet-stream")}
+                data = {"table_name": sqlite_table}
+                response = requests.post(
+                    f"{API_BASE_URL}/ingest/sqlite",
+                    files=files,
+                    data=data,
+                    timeout=180
+                )
+                response.raise_for_status()
+                st.success("✅ SQLite table ingested successfully!")
+                st.rerun()
+            except Exception as e:
+                st.error(f"❌ SQLite ingestion failed: {e}")
+
     st.divider()
     st.subheader("📚 Uploaded Documents")
 
@@ -117,14 +175,14 @@ with st.sidebar:
     
 # --------------------- Main Area ---------------------
 st.title("📚 RAG Assistant")
-st.caption("Ask questions about your uploaded PDFs • Powered by Groq + FAISS")
+st.caption("Ask questions about PDFs, web pages, SQLite tables, and video transcripts • Powered by Groq + FAISS")
 
 # Initialize session state
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
 
 # Chat Input
-question = st.chat_input("Ask anything about your documents...")
+question = st.chat_input("Ask anything about your sources: PDFs, web pages, SQLite tables, or videos...")
 
 if question:
     # Add user message

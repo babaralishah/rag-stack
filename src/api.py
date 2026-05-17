@@ -16,9 +16,11 @@ from src.cache import get_cache_stats, clear_all_caches
 
 from pathlib import Path
 from typing import Optional, List, Dict, Any
+from datetime import datetime
+import hashlib
     
-from fastapi import FastAPI, UploadFile, File, HTTPException
-from pydantic import BaseModel
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException
+from pydantic import BaseModel, HttpUrl
 
 import json
 
@@ -30,6 +32,7 @@ from src.embedder import HFEmbedder
 from src.vector_store import FaissVectorStore
 from src.rag_pipeline import rag_answer
 from src.query_rewriter import rewrite_query
+from src.source_loader import fetch_web_text, fetch_youtube_transcript, load_sqlite_table
 
 app = FastAPI(title="Local RAG API", version="0.1")
 
@@ -86,10 +89,47 @@ def already_ingested(file_hash: str) -> bool:
 
     return file_hash in hashes
 
+
+def compute_source_hash(source_value: str) -> str:
+    return hashlib.sha256(source_value.encode("utf-8")).hexdigest()
+
+
+def ingest_pages(
+    pages: List[Dict[str, Any]],
+    source_file: str,
+    source_type: str,
+    source_hash: str,
+) -> Dict[str, Any]:
+    if not pages:
+        raise HTTPException(status_code=400, detail="No text content extracted from source.")
+
+    page_dicts = [{"text": p["text"], "metadata": p["metadata"]} for p in pages]
+    chunks = chunk_text(page_dicts, chunk_size=CHUNK_SIZE, chunk_overlap=CHUNK_OVERLAP)
+
+    texts = [c.text for c in chunks]
+    metas = []
+    for c in chunks:
+        m = dict(c.metadata)
+        m["file_hash"] = source_hash
+        m["source_file"] = source_file
+        m["source_type"] = source_type
+        m["uploaded_at"] = datetime.utcnow().isoformat() + "Z"
+        metas.append(m)
+
+    emb = get_embedder().embed_texts(texts)
+    store = load_or_create_store(dim=emb.shape[1])
+    store.add(emb, texts, metas)
+    store.save()
+    clear_all_caches()
+
+    return {"status": "ingested", "source": source_file, "chunks_added": len(texts)}
+
+
 class QueryRequest(BaseModel):
     question: str
     top_k: int = TOP_K
     use_reranker: bool = True
+    use_hybrid: bool = True
 
 class QueryResponse(BaseModel):
     answer: str
@@ -97,8 +137,11 @@ class QueryResponse(BaseModel):
 
 @app.post("/upload")
 async def upload_pdf(file: UploadFile = File(...)):
-    if not file.filename.lower().endswith(".pdf"):
-        raise HTTPException(status_code=400, detail="Only .pdf files are supported right now.")
+    supported_text = {".md", ".txt", ".py", ".js", ".ts", ".json", ".csv"}
+    file_ext = Path(file.filename).suffix.lower()
+
+    if file_ext != ".pdf" and file_ext not in supported_text:
+        raise HTTPException(status_code=400, detail="Supported uploads are PDF, markdown, text, and code files.")
 
     UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
     save_path = UPLOADS_DIR / file.filename
@@ -116,14 +159,31 @@ async def upload_pdf(file: UploadFile = File(...)):
         return {"status": "skipped", "reason": "File already ingested", "file": file.filename}
 
     try:
-        pages = load_pdf(str(save_path))
-        if not pages:
-            raise HTTPException(
-                status_code=400,
-                detail="No extractable text found. PDF might be scanned. Use a text-based PDF for now."
-            )
+        if file_ext == ".pdf":
+            pages = load_pdf(str(save_path))
+            if not pages:
+                raise HTTPException(
+                    status_code=400,
+                    detail="No extractable text found. PDF might be scanned. Use a text-based PDF for now."
+                )
+        else:
+            try:
+                text_content = content.decode("utf-8")
+            except UnicodeDecodeError:
+                text_content = content.decode("latin-1", errors="replace")
 
-        page_dicts = [{"text": p.text, "metadata": p.metadata} for p in pages]
+            if not text_content.strip():
+                raise HTTPException(status_code=400, detail="Uploaded text file is empty or could not be decoded.")
+
+            pages = [{
+                "text": text_content,
+                "metadata": {
+                    "source_type": "code" if file_ext in {".py", ".js", ".ts"} else "markdown" if file_ext == ".md" else "text",
+                    "file_extension": file_ext,
+                }
+            }]
+
+        page_dicts = [{"text": p.text, "metadata": p.metadata} for p in pages] if file_ext == ".pdf" else [{"text": p["text"], "metadata": p["metadata"]} for p in pages]
         chunks = chunk_text(page_dicts, chunk_size=CHUNK_SIZE, chunk_overlap=CHUNK_OVERLAP)
 
         texts = [c.text for c in chunks]
@@ -131,6 +191,9 @@ async def upload_pdf(file: UploadFile = File(...)):
         for c in chunks:
             m = dict(c.metadata)
             m["file_hash"] = fhash
+            m["source_file"] = file.filename
+            m["source_type"] = "pdf" if file_ext == ".pdf" else m.get("source_type", "text")
+            m["uploaded_at"] = datetime.utcnow().isoformat() + "Z"
             metas.append(m)
 
         emb = get_embedder().embed_texts(texts)
@@ -144,6 +207,64 @@ async def upload_pdf(file: UploadFile = File(...)):
     except Exception as e:
         logger.exception("Upload/indexing failed: %s", e)
         raise HTTPException(status_code=500, detail="Indexing failed. Check server logs.")
+
+
+@app.post("/ingest/url")
+def ingest_url(url: HttpUrl = Form(...)):
+    try:
+        pages = fetch_web_text(str(url))
+        source_hash = compute_source_hash(str(url))
+        return ingest_pages(pages, source_file=str(url), source_type="web", source_hash=source_hash)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.exception("URL ingestion failed: %s", e)
+        raise HTTPException(status_code=500, detail="Failed to ingest URL source.")
+
+
+@app.post("/ingest/youtube")
+def ingest_youtube(url: HttpUrl = Form(...)):
+    try:
+        pages = fetch_youtube_transcript(str(url))
+        source_hash = compute_source_hash(str(url))
+        return ingest_pages(pages, source_file=str(url), source_type="youtube", source_hash=source_hash)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.exception("YouTube ingestion failed: %s", e)
+        raise HTTPException(status_code=500, detail="Failed to ingest YouTube source.")
+
+
+@app.post("/ingest/sqlite")
+async def ingest_sqlite(file: UploadFile = File(...), table_name: str = Form("user_history")):
+    if not file.filename.lower().endswith((".db", ".sqlite")):
+        raise HTTPException(status_code=400, detail="Upload a .db or .sqlite file.")
+
+    try:
+        content = await file.read()
+    except Exception as e:
+        logger.exception("Failed reading SQLite upload: %s", e)
+        raise HTTPException(status_code=500, detail="Could not read SQLite upload.")
+
+    temp_path = UPLOADS_DIR / file.filename
+    temp_path.write_bytes(content)
+
+    try:
+        pages = load_sqlite_table(str(temp_path), table_name=table_name)
+        source_hash = compute_source_hash(str(file.filename) + table_name)
+        result = ingest_pages(
+            pages,
+            source_file=f"{file.filename}:{table_name}",
+            source_type="sqlite",
+            source_hash=source_hash
+        )
+        return result
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.exception("SQLite ingestion failed: %s", e)
+        raise HTTPException(status_code=500, detail="Failed to ingest SQLite source.")
+
 
 @app.post("/query", response_model=QueryResponse)
 def query(req: QueryRequest):
@@ -176,7 +297,7 @@ def query(req: QueryRequest):
         meta_path = STORE_DIR / "meta.jsonl"
 
         if not index_path.exists() or not meta_path.exists():
-            return QueryResponse(answer="No documents indexed yet. Upload a PDF first.", sources=[])
+            return QueryResponse(answer="No documents indexed yet. Upload at least one source first.", sources=[])
 
         store = load_or_create_store(dim=EMBED_DIM)
         qv = emb.embed_query(rewritten_query)
@@ -185,6 +306,7 @@ def query(req: QueryRequest):
 
         retrieved = store.search(
             query_vec=qv,
+            query_text=rewritten_query,
             top_k=retrieve_k,
             use_hybrid=getattr(req, 'use_hybrid', True)
         )
@@ -215,7 +337,7 @@ class DocumentResponse(BaseModel):
 
 @app.get("/documents", response_model=List[DocumentResponse])
 def list_documents():
-    """List all uploaded documents"""
+    """List all uploaded documents and sources"""
     try:
         store = load_or_create_store(dim=EMBED_DIM)
         docs = store.get_all_documents()
