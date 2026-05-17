@@ -82,7 +82,7 @@ def fetch_youtube_transcript(url: str) -> List[Dict[str, Any]]:
         raise ValueError("youtube-transcript-api is required to ingest YouTube transcripts. Install it with pip.") from exc
 
     try:
-        transcript = YouTubeTranscriptApi.get_transcript(video_id, languages=["en", "en-US", "en-GB"])
+        transcript = YouTubeTranscriptApi().fetch(video_id, languages=["en", "en-US", "en-GB"], preserve_formatting=False)
     except TranscriptsDisabled:
         raise ValueError("Transcript is disabled for this video.")
     except NoTranscriptFound:
