@@ -4,6 +4,16 @@ import streamlit as st
 import requests
 from typing import Dict, Any
 
+
+def format_api_error(exc: Exception) -> str:
+    if isinstance(exc, requests.exceptions.HTTPError) and exc.response is not None:
+        try:
+            body = exc.response.json()
+            return body.get("detail") or exc.response.text
+        except Exception:
+            return exc.response.text
+    return str(exc)
+
 # --------------------- Config ---------------------
 st.set_page_config(
     page_title="RAG Assistant",
@@ -52,8 +62,7 @@ with st.sidebar:
                 st.success("✅ Web source ingested successfully!")
                 st.rerun()
             except Exception as e:
-                st.error(f"❌ Web ingestion failed: {e}")
-
+                    st.error(f"❌ Web ingestion failed: {format_api_error(e)}")
     st.divider()
     st.subheader("🔊 YouTube / Video Transcript")
     youtube_url = st.text_input("Enter a YouTube video link", key="youtube_url")
@@ -69,7 +78,7 @@ with st.sidebar:
                 st.success("✅ YouTube transcript ingested successfully!")
                 st.rerun()
             except Exception as e:
-                st.error(f"❌ YouTube ingestion failed: {e}")
+                st.error(f"❌ YouTube ingestion failed: {format_api_error(e)}")
 
     st.divider()
     st.subheader("🗄️ Local SQLite Database")
@@ -90,7 +99,7 @@ with st.sidebar:
                 st.success("✅ SQLite table ingested successfully!")
                 st.rerun()
             except Exception as e:
-                st.error(f"❌ SQLite ingestion failed: {e}")
+                st.error(f"❌ SQLite ingestion failed: {format_api_error(e)}")
 
     st.divider()
     st.subheader("📚 Uploaded Documents")

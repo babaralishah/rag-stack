@@ -77,19 +77,24 @@ def fetch_youtube_transcript(url: str) -> List[Dict[str, Any]]:
     video_id = extract_youtube_id(url)
 
     try:
-        from youtube_transcript_api import YouTubeTranscriptApi, TranscriptsDisabled, NoTranscriptFound
+        from youtube_transcript_api import YouTubeTranscriptApi, TranscriptsDisabled, NoTranscriptFound, RequestBlocked
     except ModuleNotFoundError as exc:
         raise ValueError("youtube-transcript-api is required to ingest YouTube transcripts. Install it with pip.") from exc
 
     try:
         transcript = YouTubeTranscriptApi().fetch(video_id, languages=["en", "en-US", "en-GB"], preserve_formatting=False)
+    except RequestBlocked:
+        raise ValueError(
+            "YouTube blocked the transcript request from this environment. "
+            "Cloud-hosted IPs are often blocked by YouTube, so use a local proxy, a different network, or upload a transcript manually."
+        )
     except TranscriptsDisabled:
         raise ValueError("Transcript is disabled for this video.")
     except NoTranscriptFound:
         raise ValueError("No transcript found for this video.")
     except Exception as exc:
         logger.exception("YouTube transcript fetch failed: %s", exc)
-        raise ValueError("Failed to fetch transcript from YouTube.")
+        raise ValueError(str(exc) or "Failed to fetch transcript from YouTube.")
 
     transcript_text = "\n".join([normalize_text(item["text"]) for item in transcript if item.get("text")])
     if len(transcript_text) < 50:
