@@ -52,6 +52,7 @@ logging.basicConfig(
 logger = logging.getLogger("rag")
 logger.setLevel(logging.INFO)
 
+SUPPORTED_UPLOAD_EXTENSIONS = {".md", ".txt", ".py", ".js", ".ts", ".json", ".csv"}
 
 app = FastAPI(title="Local RAG API", version="0.1")
 
@@ -168,28 +169,109 @@ class QueryResponse(BaseModel):
     sources: List[Dict[str, Any]]
 
 
-@app.post("/upload")
-async def upload_pdf(file: UploadFile = File(...)):
-    supported_text = {".md", ".txt", ".py", ".js", ".ts", ".json", ".csv"}
-    file_ext = Path(file.filename).suffix.lower()
-
-    if file_ext != ".pdf" and file_ext not in supported_text:
+def validate_upload_extension(file_ext: str) -> None:
+    """Raise an HTTP exception when the uploaded file extension is unsupported."""
+    if file_ext != ".pdf" and file_ext not in SUPPORTED_UPLOAD_EXTENSIONS:
         raise HTTPException(
             status_code=400,
-            detail="Supported uploads are PDF, markdown, text, and code files.",
+            detail="Supported uploads are PDF, markdown, text, JSON, CSV, and code files.",
         )
 
+
+async def save_upload_file(upload_file: UploadFile) -> tuple[Path, bytes]:
+    """Save the uploaded file to disk and return its content bytes."""
     UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
-    save_path = UPLOADS_DIR / file.filename
+    save_path = UPLOADS_DIR / upload_file.filename
 
     try:
-        content = await file.read()
+        content = await upload_file.read()
         save_path.write_bytes(content)
+        return save_path, content
     except Exception as e:
         logger.exception("Failed saving upload: %s", e)
         raise HTTPException(status_code=500, detail="Failed to save uploaded file.")
 
-    # Hash for dedupe
+
+def parse_upload_file_to_pages(
+    file_ext: str, content: bytes, save_path: Path
+) -> List[Dict[str, Any]]:
+    """Convert uploaded content into page dictionaries for chunking."""
+    if file_ext == ".pdf":
+        pages = load_pdf(str(save_path))
+        if not pages:
+            raise HTTPException(
+                status_code=400,
+                detail="No extractable text found. PDF might be scanned. Use a text-based PDF for now.",
+            )
+        return [{"text": p.text, "metadata": p.metadata} for p in pages]
+
+    try:
+        text_content = content.decode("utf-8")
+    except UnicodeDecodeError:
+        text_content = content.decode("latin-1", errors="replace")
+
+    if not text_content.strip():
+        raise HTTPException(
+            status_code=400,
+            detail="Uploaded text file is empty or could not be decoded.",
+        )
+
+    source_type = (
+        "code"
+        if file_ext in {".py", ".js", ".ts"}
+        else "markdown"
+        if file_ext == ".md"
+        else "text"
+    )
+
+    return [
+        {
+            "text": text_content,
+            "metadata": {
+                "source_type": source_type,
+                "file_extension": file_ext,
+            },
+        }
+    ]
+
+
+def ingest_upload_pages(
+    pages: List[Dict[str, Any]], file_hash: str, filename: str, file_ext: str
+) -> Dict[str, Any]:
+    """Chunk, embed, and store uploaded pages with upload-specific metadata."""
+    if not pages:
+        raise HTTPException(status_code=400, detail="No upload content found.")
+
+    chunks = chunk_text(pages, chunk_size=CHUNK_SIZE, chunk_overlap=CHUNK_OVERLAP)
+
+    texts = [c.text for c in chunks]
+    metas: List[Dict[str, Any]] = []
+    for c in chunks:
+        m = dict(c.metadata)
+        m["file_hash"] = file_hash
+        m["source_file"] = filename
+        m["source_type"] = "pdf" if file_ext == ".pdf" else m.get("source_type", "text")
+        m["uploaded_at"] = datetime.utcnow().isoformat() + "Z"
+        metas.append(m)
+
+    emb = get_embedder().embed_texts(texts)
+    store = load_or_create_store(dim=emb.shape[1])
+    store.add(emb, texts, metas)
+    store.save()
+    clear_all_caches()
+
+    return {"status": "ingested", "file": filename, "chunks_added": len(texts)}
+
+
+@app.post("/upload")
+async def upload_pdf(file: UploadFile = File(...)):
+    """Upload a document, deduplicate, parse content, and index new chunks."""
+    file_ext = Path(file.filename).suffix.lower()
+    validate_upload_extension(file_ext)
+
+    save_path, content = await save_upload_file(file)
+
+    # Deduplicate uploads by content hash
     fhash = file_sha256(save_path)
     if already_ingested(fhash):
         return {
@@ -199,66 +281,8 @@ async def upload_pdf(file: UploadFile = File(...)):
         }
 
     try:
-        if file_ext == ".pdf":
-            pages = load_pdf(str(save_path))
-            if not pages:
-                raise HTTPException(
-                    status_code=400,
-                    detail="No extractable text found. PDF might be scanned. Use a text-based PDF for now.",
-                )
-        else:
-            try:
-                text_content = content.decode("utf-8")
-            except UnicodeDecodeError:
-                text_content = content.decode("latin-1", errors="replace")
-
-            if not text_content.strip():
-                raise HTTPException(
-                    status_code=400,
-                    detail="Uploaded text file is empty or could not be decoded.",
-                )
-
-            pages = [
-                {
-                    "text": text_content,
-                    "metadata": {
-                        "source_type": (
-                            "code"
-                            if file_ext in {".py", ".js", ".ts"}
-                            else "markdown" if file_ext == ".md" else "text"
-                        ),
-                        "file_extension": file_ext,
-                    },
-                }
-            ]
-
-        page_dicts = (
-            [{"text": p.text, "metadata": p.metadata} for p in pages]
-            if file_ext == ".pdf"
-            else [{"text": p["text"], "metadata": p["metadata"]} for p in pages]
-        )
-        chunks = chunk_text(
-            page_dicts, chunk_size=CHUNK_SIZE, chunk_overlap=CHUNK_OVERLAP
-        )
-
-        texts = [c.text for c in chunks]
-        metas = []
-        for c in chunks:
-            m = dict(c.metadata)
-            m["file_hash"] = fhash
-            m["source_file"] = file.filename
-            m["source_type"] = (
-                "pdf" if file_ext == ".pdf" else m.get("source_type", "text")
-            )
-            m["uploaded_at"] = datetime.utcnow().isoformat() + "Z"
-            metas.append(m)
-
-        emb = get_embedder().embed_texts(texts)
-        store = load_or_create_store(dim=emb.shape[1])
-        store.add(emb, texts, metas)
-        store.save()
-        clear_all_caches()
-        return {"status": "ingested", "file": file.filename, "chunks_added": len(texts)}
+        pages = parse_upload_file_to_pages(file_ext, content, save_path)
+        return ingest_upload_pages(pages, file_hash=fhash, filename=file.filename, file_ext=file_ext)
     except HTTPException:
         raise
     except Exception as e:
