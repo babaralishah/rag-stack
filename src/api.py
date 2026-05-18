@@ -15,7 +15,13 @@ import json
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from pydantic import BaseModel, HttpUrl
 
-from src.cache import get_cache_stats, clear_all_caches
+from src.cache import (
+    get_cache_key,
+    get_cache_stats,
+    get_cached_query,
+    clear_all_caches,
+    set_cached_query,
+)
 from src.config import (
     RERANKER_TOP_K,
     UPLOADS_DIR,
@@ -410,75 +416,102 @@ async def list_sqlite_tables(file: UploadFile = File(...)):
         raise HTTPException(status_code=500, detail="Failed to inspect SQLite tables.")
 
 
-@app.post("/query", response_model=QueryResponse)
-def query(req: QueryRequest):
-    q = req.question.strip()
-    if not q:
+def validate_query_text(req: QueryRequest) -> str:
+    """Validate that the request contains a non-empty question."""
+    question = req.question.strip()
+    if not question:
         raise HTTPException(status_code=400, detail="Question cannot be empty.")
+    return question
 
-    from src.cache import get_cache_key, get_cached_query, set_cached_query
 
-    # Check Cache
-    cache_key = get_cache_key(
-        question=q,
-        use_hybrid=getattr(req, "use_hybrid", True),
-        use_reranker=getattr(req, "use_reranker", True),
-        top_k=req.top_k,
+def get_cached_query_response(cache_key: str) -> QueryResponse | None:
+    """Return a cached query response when available."""
+    cached = get_cached_query(cache_key)
+    if cached is None:
+        return None
+
+    logger.info(f"🔄 QUERY CACHE HIT: {cache_key[:70]}...")
+    return QueryResponse(answer=cached["answer"], sources=cached.get("sources", []))
+
+
+def load_search_store() -> FaissVectorStore | None:
+    """Load the vector store when persisted metadata and index exist."""
+    index_path = STORE_DIR / "index.faiss"
+    meta_path = STORE_DIR / "meta.jsonl"
+    if not index_path.exists() or not meta_path.exists():
+        return None
+    return load_or_create_store(dim=EMBED_DIM)
+
+
+def rewrite_and_embed_query(question: str) -> tuple[str, Any]:
+    """Rewrite the user question and embed it for retrieval."""
+    from src.query_rewriter import rewrite_query
+
+    rewritten = rewrite_query(question)
+    query_vector = get_embedder().embed_query(rewritten)
+    return rewritten, query_vector
+
+
+def search_documents(
+    store: FaissVectorStore, rewritten_query: str, query_vector: Any, req: QueryRequest
+) -> list:
+    """Search the vector store with optional hybrid retrieval and reranking candidate count."""
+    retrieve_k = RERANKER_TOP_K if req.use_reranker else req.top_k
+    return store.search(
+        query_vec=query_vector,
+        query_text=rewritten_query,
+        top_k=retrieve_k,
+        use_hybrid=req.use_hybrid,
     )
 
-    cached = get_cached_query(cache_key)
-    if cached is not None:
-        logger.info(f"🔄 QUERY CACHE HIT: {q[:70]}...")
-        return QueryResponse(answer=cached["answer"], sources=cached.get("sources", []))
 
-    # Normal processing
+def generate_answer_payload(question: str, retrieved: list, req: QueryRequest) -> Dict[str, Any]:
+    """Generate the final answer payload from retrieval and reranking."""
+    out = rag_answer(
+        question=question,
+        retrieved=retrieved,
+        min_score=MIN_SCORE,
+        use_reranker=req.use_reranker,
+        final_top_k=req.top_k,
+    )
+    return {"answer": out["answer"], "sources": out.get("sources", [])}
+
+
+@app.post("/query", response_model=QueryResponse)
+def query(req: QueryRequest):
+    """Handle query requests by validating input, checking cache, searching, and generating answers."""
+    question = validate_query_text(req)
+    cache_key = get_cache_key(
+        question=question,
+        use_hybrid=req.use_hybrid,
+        use_reranker=req.use_reranker,
+        top_k=req.top_k,
+    )
+    cached_response = get_cached_query_response(cache_key)
+    if cached_response is not None:
+        return cached_response
+
     try:
-        from src.query_rewriter import rewrite_query
-
-        rewritten_query = rewrite_query(q)
-
-        emb = get_embedder()
-        index_path = STORE_DIR / "index.faiss"
-        meta_path = STORE_DIR / "meta.jsonl"
-
-        if not index_path.exists() or not meta_path.exists():
+        store = load_search_store()
+        if store is None:
             return QueryResponse(
                 answer="No documents indexed yet. Upload at least one source first.",
                 sources=[],
             )
 
-        store = load_or_create_store(dim=EMBED_DIM)
-        qv = emb.embed_query(rewritten_query)
-
-        # If reranking is enabled, retrieve more candidates (RERANKER_TOP_K) for better ranking
-        # Then rag_answer will keep only the user's requested top_k after reranking
-        retrieve_k = RERANKER_TOP_K if getattr(req, "use_reranker", True) else req.top_k
-
-        retrieved = store.search(
-            query_vec=qv,
-            query_text=rewritten_query,
-            top_k=retrieve_k,
-            use_hybrid=getattr(req, "use_hybrid", True),
-        )
+        rewritten_query, query_vector = rewrite_and_embed_query(question)
+        retrieved = search_documents(store, rewritten_query, query_vector, req)
 
         logger.info(
-            f"Retrieved {len(retrieved)} chunks, user requested top_k={req.top_k}, reranking={'enabled' if getattr(req, 'use_reranker', True) else 'disabled'}"
+            f"Retrieved {len(retrieved)} chunks, user requested top_k={req.top_k}, "
+            f"reranking={'enabled' if req.use_reranker else 'disabled'}"
         )
 
-        out = rag_answer(
-            question=q,
-            retrieved=retrieved,
-            min_score=MIN_SCORE,
-            use_reranker=getattr(req, "use_reranker", True),
-            final_top_k=req.top_k,  # This ensures exactly top_k results after reranking
-        )
-
-        result = {"answer": out["answer"], "sources": out.get("sources", [])}
+        result = generate_answer_payload(question, retrieved, req)
         set_cached_query(cache_key, result)
 
-        logger.info(f"✅ Query cached: {q[:60]}...")
-        return QueryResponse(answer=out["answer"], sources=out["sources"])
-
+        logger.info(f"✅ Query cached: {question[:60]}...")
+        return QueryResponse(**result)
     except Exception:
         logger.exception("Query failed")
         raise HTTPException(status_code=500, detail="Internal server error")
