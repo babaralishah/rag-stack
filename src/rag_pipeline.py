@@ -7,6 +7,12 @@ from src.reranker import get_reranker
 logger = logging.getLogger("rag")
 
 def build_context(results: List[Dict[str, Any]], max_chars: int = MAX_CHARS) -> str:
+    """
+    Build a concatenated context string from retrieved chunks.
+
+    - Preserves source headers and simple metadata per chunk.
+    - Stops when `max_chars` is reached to avoid overly long prompts.
+    """
     parts = []
     total = 0
     for r in results:
@@ -28,7 +34,17 @@ def rag_answer(
     use_reranker: bool = True,
     final_top_k: int = 5,
 ) -> Dict[str, Any]:
-    
+    """
+    Generate an answer for `question` using `retrieved` document chunks.
+
+    Steps:
+    1. Optionally rerank candidate chunks using a cross-encoder reranker.
+    2. Trim to `final_top_k` and build a prompt context.
+    3. Call the LLM with strict instructions to use only the provided context.
+
+    Returns a dict with keys: `answer` and `sources`.
+    """
+
     # === Reranking Step ===
     if use_reranker and retrieved:
         try:

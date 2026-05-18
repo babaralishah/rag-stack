@@ -208,6 +208,8 @@ with st.sidebar:
         use_hybrid = st.checkbox("Enable Hybrid Search", value=True,
                                 help="Semantic + Keyword (BM25)")
 
+    # Number of retrieved chunks to request from the backend. This value
+    # is sent as `top_k` in the query payload and controls final result size.
     top_k = st.slider("Number of chunks to retrieve", 
                       min_value=3, max_value=15, value=6, step=1)
 

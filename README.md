@@ -122,3 +122,21 @@ Delete the storage folder:
 ```bash
 rm -rf storage/    # Mac/Linux
 rmdir /s storage   # Windows
+## Maintenance Notes
+
+- Optional dependencies: `rank_bm25` is used for BM25 keyword search. If it is not installed the app will still run; BM25-based features will be disabled and a warning is logged.
+- To enable full hybrid search, install optional packages:
+
+```bash
+pip install rank_bm25 beautifulsoup4 youtube-transcript-api
+```
+
+- Quick smoke test (without starting the server):
+
+```bash
+# from project root
+python -c "from fastapi.testclient import TestClient; import src.api as a; c=TestClient(a.app); print(c.get('/health').json())"
+```
+
+- UI notes: the `top_k` slider in `ui.py` controls how many final chunks are returned to the LLM. If re-ranking is enabled the backend fetches more candidates before re-ranking down to `top_k`.
+

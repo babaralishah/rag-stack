@@ -4,7 +4,10 @@ from pathlib import Path
 import json
 import numpy as np
 import faiss
-from rank_bm25 import BM25Okapi
+try:
+    from rank_bm25 import BM25Okapi
+except Exception:
+    BM25Okapi = None
 
 from src.config import TOP_K
 
@@ -40,6 +43,9 @@ class FaissVectorStore:
 
     def _build_bm25(self):
         if not self.records:
+            return
+        if BM25Okapi is None:
+            logger.debug("rank_bm25 not available; skipping BM25 build")
             return
         tokenized = [rec["text"].lower().split() for rec in self.records]
         self.bm25 = BM25Okapi(tokenized)

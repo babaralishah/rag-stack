@@ -1,7 +1,10 @@
 import logging
 from typing import List, Dict
 import numpy as np
-from rank_bm25 import BM25Okapi
+try:
+    from rank_bm25 import BM25Okapi
+except Exception:
+    BM25Okapi = None
 
 logger = logging.getLogger("rag")
 
@@ -13,6 +16,10 @@ class HybridRetriever:
     def build_index(self, chunks: List[Dict]):
         """Build BM25 index from all chunks"""
         self.chunks = chunks
+        if BM25Okapi is None:
+            logger.warning("rank_bm25 not installed; BM25 index will be unavailable")
+            self.bm25 = None
+            return
         tokenized = [chunk["text"].lower().split() for chunk in chunks]
         self.bm25 = BM25Okapi(tokenized)
         logger.info(f"✅ BM25 index built with {len(chunks)} chunks")
