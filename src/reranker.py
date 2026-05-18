@@ -6,6 +6,7 @@ from sentence_transformers import CrossEncoder
 
 logger = logging.getLogger("rag")
 
+
 class CrossEncoderReranker:
     def __init__(self, model_name: str = "BAAI/bge-reranker-base"):
         logger.info(f"Loading reranker: {model_name}")
@@ -13,7 +14,21 @@ class CrossEncoderReranker:
         self.apply_sigmoid = "bge-reranker" in model_name.lower()
         logger.info(f"Reranker loaded. Apply sigmoid: {self.apply_sigmoid}")
 
-    def rerank(self, query: str, candidates: List[dict], top_k: int = 6, fusion_alpha: float = 0.65) -> List[dict]:
+        """Cross-encoder based reranker.
+
+        - Uses a `CrossEncoder` to score (query, candidate) pairs.
+        - Optionally applies sigmoid normalization for BGE models.
+        - Produces `rerank_score` and `final_score` for each candidate and
+            returns the top_k items sorted by `final_score`.
+        """
+
+    def rerank(
+        self,
+        query: str,
+        candidates: List[dict],
+        top_k: int = 6,
+        fusion_alpha: float = 0.65,
+    ) -> List[dict]:
         if not candidates:
             return []
 
@@ -43,7 +58,7 @@ class CrossEncoderReranker:
 
         # Sort by final fused score
         reranked = sorted(candidates, key=lambda x: x["final_score"], reverse=True)
-        
+
         return reranked[:top_k]
 
     def _normalize(self, scores: np.ndarray) -> np.ndarray:
@@ -56,9 +71,11 @@ class CrossEncoderReranker:
 # Singleton
 _reranker = None
 
+
 def get_reranker():
     global _reranker
     if _reranker is None:
         from src.config import RERANKER_MODEL
+
         _reranker = CrossEncoderReranker(model_name=RERANKER_MODEL)
     return _reranker

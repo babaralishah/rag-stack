@@ -6,6 +6,7 @@ from src.reranker import get_reranker
 
 logger = logging.getLogger("rag")
 
+
 def build_context(results: List[Dict[str, Any]], max_chars: int = MAX_CHARS) -> str:
     """
     Build a concatenated context string from retrieved chunks.
@@ -17,7 +18,9 @@ def build_context(results: List[Dict[str, Any]], max_chars: int = MAX_CHARS) -> 
     total = 0
     for r in results:
         meta = r["metadata"]
-        header = f"[source: {meta.get('source_file', 'unknown')} p.{meta.get('page', '?')}]"
+        header = (
+            f"[source: {meta.get('source_file', 'unknown')} p.{meta.get('page', '?')}]"
+        )
         text = r["text"].strip().replace("\n", " ")
         block = f"{header}\n{text}\n"
         if total + len(block) > max_chars:
@@ -50,12 +53,12 @@ def rag_answer(
         try:
             reranker = get_reranker()
             logger.info(f"✅ Re-ranking ENABLED - processing {len(retrieved)} chunks")
-            
+
             retrieved = reranker.rerank(
                 query=question,
                 candidates=retrieved,
                 top_k=final_top_k,
-                fusion_alpha=RERANKER_FUSION_ALPHA
+                fusion_alpha=RERANKER_FUSION_ALPHA,
             )
         except Exception as e:
             logger.error(f"Reranking failed: {e}. Falling back to original scores.")
@@ -72,10 +75,12 @@ def rag_answer(
 
     # Case 1: No results
     if not retrieved:
-        general_answer = generate_answer(f"Answer this question concisely using your general knowledge: {question}")
+        general_answer = generate_answer(
+            f"Answer this question concisely using your general knowledge: {question}"
+        )
         return {
             "answer": f"I don't have any documents about this topic.\n\n"
-                      f"However, based on my general knowledge:\n{general_answer}",
+            f"However, based on my general knowledge:\n{general_answer}",
             "sources": [],
         }
 
@@ -107,20 +112,22 @@ QUESTION: {question}
 
 ANSWER:"""
 
-    answer = generate_answer(prompt, temperature=0.1)   # Low temperature = more grounded
+    answer = generate_answer(prompt, temperature=0.1)  # Low temperature = more grounded
 
     # Prepare sources
     sources = []
     for r in retrieved[:3]:
         file = r["metadata"].get("source_file", "unknown")
         page = r["metadata"].get("page", "?")
-        sources.append({
-            "score": round(r.get("score", 0), 3),
-            "rerank_score": round(r.get("rerank_score", 0), 3),
-            "final_score": round(r.get("final_score", 0), 4),
-            "file": file,
-            "page": page,
-            "snippet": r["text"][:280].replace("\n", " "),
-        })
+        sources.append(
+            {
+                "score": round(r.get("score", 0), 3),
+                "rerank_score": round(r.get("rerank_score", 0), 3),
+                "final_score": round(r.get("final_score", 0), 4),
+                "file": file,
+                "page": page,
+                "snippet": r["text"][:280].replace("\n", " "),
+            }
+        )
 
     return {"answer": answer, "sources": sources}

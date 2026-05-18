@@ -1,4 +1,4 @@
-# Main pipeline for loading a PDF, chunking it, embedding the chunks, and storing them in a FAISS index. 
+# Main pipeline for loading a PDF, chunking it, embedding the chunks, and storing them in a FAISS index.
 # Also includes a simple command-line loop for asking questions and retrieving relevant chunks based on cosine similarity search in the vector store.
 
 import logging
@@ -40,15 +40,21 @@ def main():
         page_dicts = []
         for p in pages:
             meta = p.metadata or {}
-            page_dicts.append({
-                "text": p.text,
-                "metadata": {
-                    **meta,
-                    # Make sure these keys exist for printing later
-                    "source_file": meta.get("source_file") or meta.get("source") or Path(PDF_PATH).name,
-                    "page": meta.get("page") or meta.get("page_number") or meta.get("page_index"),
-                },
-            })
+            page_dicts.append(
+                {
+                    "text": p.text,
+                    "metadata": {
+                        **meta,
+                        # Make sure these keys exist for printing later
+                        "source_file": meta.get("source_file")
+                        or meta.get("source")
+                        or Path(PDF_PATH).name,
+                        "page": meta.get("page")
+                        or meta.get("page_number")
+                        or meta.get("page_index"),
+                    },
+                }
+            )
 
         logging.info("Chunking pages...")
         chunks = chunk_text(page_dicts, chunk_size=800, chunk_overlap=150)
@@ -57,7 +63,9 @@ def main():
         texts = [c.text for c in chunks]
         metas = [c.metadata for c in chunks]
 
-        logging.info("Embedding %d chunks (this may take a bit on first run)...", len(texts))
+        logging.info(
+            "Embedding %d chunks (this may take a bit on first run)...", len(texts)
+        )
         embs = embedder.embed_texts(texts)
         logging.info("Embedding done. Shape: %s", getattr(embs, "shape", None))
 
@@ -87,7 +95,9 @@ def main():
             meta = r.get("metadata") or {}
             snippet = (r.get("text") or "")[:300].replace("\n", " ")
 
-            print(f"\n[{i}] score={r['score']:.3f} | {meta.get('source_file')} p.{meta.get('page')}")
+            print(
+                f"\n[{i}] score={r['score']:.3f} | {meta.get('source_file')} p.{meta.get('page')}"
+            )
             print(snippet, "..." if len(r.get("text") or "") > 300 else "")
 
 

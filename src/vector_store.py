@@ -1,9 +1,16 @@
+"""Vector store implementation combining FAISS semantic search with BM25.
+
+FaissVectorStore stores dense vectors and metadata, persists index data, and
+supports optional hybrid retrieval using reciprocal rank fusion.
+"""
+
 import logging
 from typing import List, Dict, Any, Optional
 from pathlib import Path
 import json
 import numpy as np
 import faiss
+
 try:
     from rank_bm25 import BM25Okapi
 except Exception:
@@ -15,6 +22,8 @@ logger = logging.getLogger("rag")
 
 
 class FaissVectorStore:
+    """Vector store wrapper for FAISS search and optional BM25 hybrid retrieval."""
+
     def __init__(self, dim: int, store_dir: str):
         self.dim = dim
         self.store_dir = Path(store_dir)
@@ -25,7 +34,9 @@ class FaissVectorStore:
         self.bm25: Optional[BM25Okapi] = None
         self.records: List[Dict[str, Any]] = []
 
-    def add(self, embeddings: np.ndarray, texts: List[str], metadatas: List[Dict[str, Any]]):
+    def add(
+        self, embeddings: np.ndarray, texts: List[str], metadatas: List[Dict[str, Any]]
+    ):
         if len(texts) != len(metadatas) or len(texts) != embeddings.shape[0]:
             raise ValueError("Lengths of embeddings, texts, and metadatas must match")
 
@@ -66,13 +77,15 @@ class FaissVectorStore:
             if idx == -1:
                 continue
             rec = self.records[idx]
-            results.append({
-                "text": rec["text"],
-                "metadata": rec["metadata"],
-                "semantic_score": float(score),
-                "score": float(score),
-                "source": "semantic"
-            })
+            results.append(
+                {
+                    "text": rec["text"],
+                    "metadata": rec["metadata"],
+                    "semantic_score": float(score),
+                    "score": float(score),
+                    "source": "semantic",
+                }
+            )
         return results
 
     def _bm25_search(self, query_text: str, k: int) -> List[Dict[str, Any]]:
@@ -87,13 +100,15 @@ class FaissVectorStore:
             results = []
             for idx in top_indices:
                 rec = self.records[idx]
-                results.append({
-                    "text": rec["text"],
-                    "metadata": rec["metadata"],
-                    "bm25_score": float(bm25_scores[idx]),
-                    "score": float(bm25_scores[idx]),
-                    "source": "bm25"
-                })
+                results.append(
+                    {
+                        "text": rec["text"],
+                        "metadata": rec["metadata"],
+                        "bm25_score": float(bm25_scores[idx]),
+                        "score": float(bm25_scores[idx]),
+                        "source": "bm25",
+                    }
+                )
             return results
         except Exception as e:
             logger.warning(f"BM25 search failed: {e}")
@@ -101,9 +116,7 @@ class FaissVectorStore:
 
     @staticmethod
     def _reciprocal_rank_fusion(
-        lists: List[List[Dict[str, Any]]], 
-        k: int = 60, 
-        top_n: int = 50
+        lists: List[List[Dict[str, Any]]], k: int = 60, top_n: int = 50
     ) -> List[Dict[str, Any]]:
         """Reciprocal Rank Fusion (Industry Standard)"""
         score_dict: Dict[str, float] = {}
@@ -116,7 +129,9 @@ class FaissVectorStore:
                 score_dict[key] = score_dict.get(key, 0.0) + 1.0 / (rank + k)
 
         # Sort by RRF score
-        sorted_keys = sorted(score_dict.items(), key=lambda x: x[1], reverse=True)[:top_n]
+        sorted_keys = sorted(score_dict.items(), key=lambda x: x[1], reverse=True)[
+            :top_n
+        ]
 
         fused = []
         for key, rrf_score in sorted_keys:
@@ -150,13 +165,13 @@ class FaissVectorStore:
         bm25_results = self._bm25_search(query_text, k=top_k * 4)
 
         fused_results = self._reciprocal_rank_fusion(
-            [semantic_results, bm25_results],
-            k=60,
-            top_n=top_k * 3
+            [semantic_results, bm25_results], k=60, top_n=top_k * 3
         )
 
-        logger.debug(f"Hybrid RRF: {len(semantic_results)} semantic + "
-                    f"{len(bm25_results)} BM25 → {len(fused_results)} fused")
+        logger.debug(
+            f"Hybrid RRF: {len(semantic_results)} semantic + "
+            f"{len(bm25_results)} BM25 → {len(fused_results)} fused"
+        )
 
         return fused_results[:top_k]
 
@@ -192,15 +207,15 @@ class FaissVectorStore:
         obj._build_bm25()
         logger.info(f"Loaded {obj.index.ntotal} vectors with BM25 index")
         return obj
-    
-    
+
     def delete_by_file_hash(self, file_hash: str) -> int:
         """Delete document and rebuild indexes"""
         if not file_hash:
             return 0
 
         kept_records = [
-            rec for rec in self.records 
+            rec
+            for rec in self.records
             if rec.get("metadata", {}).get("file_hash") != file_hash
         ]
 
@@ -217,7 +232,7 @@ class FaissVectorStore:
             try:
                 from src.embedder import HFEmbedder
                 from src.config import EMBED_MODEL
-                
+
                 embedder = HFEmbedder(model_name=EMBED_MODEL)
                 texts = [r["text"] for r in self.records]
                 embeddings = embedder.embed_texts(texts)
@@ -236,28 +251,31 @@ class FaissVectorStore:
 
         logger.info(f"✅ Deleted document {file_hash} ({deleted_count} chunks)")
         return deleted_count
-    
+
     def get_all_documents(self) -> List[Dict]:
         """Return list of unique documents with metadata"""
         from collections import defaultdict
-        docs = defaultdict(lambda: {
-            "file_hash": "",
-            "filename": "",
-            "chunk_count": 0,
-            "uploaded_at": ""
-        })
+
+        docs = defaultdict(
+            lambda: {
+                "file_hash": "",
+                "filename": "",
+                "chunk_count": 0,
+                "uploaded_at": "",
+            }
+        )
 
         for rec in self.records:
             meta = rec["metadata"]
             fhash = meta.get("file_hash")
             if not fhash:
                 continue
-                
+
             if not docs[fhash]["file_hash"]:
                 docs[fhash]["file_hash"] = fhash
                 docs[fhash]["filename"] = meta.get("source_file", "unknown.pdf")
                 docs[fhash]["uploaded_at"] = meta.get("uploaded_at", "N/A")
-            
+
             docs[fhash]["chunk_count"] += 1
 
         return list(docs.values())

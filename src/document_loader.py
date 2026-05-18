@@ -9,10 +9,12 @@ from pypdf import PdfReader
 
 logger = logging.getLogger("rag")
 
+
 @dataclass
 class DocumentPage:
     text: str
     metadata: Dict[str, Any]
+
 
 def load_pdf(path: str) -> List[DocumentPage]:
     pdf_path = Path(path)

@@ -1,6 +1,11 @@
+"""Global configuration constants used throughout the Local RAG app.
+
+This module centralizes model names, vector store locations, default retrieval
+settings, and environment-driven endpoints.
+"""
+
 from pathlib import Path
 import os
-
 
 DATA_DIR = Path("data")
 UPLOADS_DIR = DATA_DIR / "uploads"
@@ -24,13 +29,13 @@ MIN_SIMILARITY = 0.30
 # Reranker Settings
 # RERANKER_MODEL = "cross-encoder/ms-marco-MiniLM-L-6-v2"
 RERANKER_MODEL = "BAAI/bge-reranker-base"
-RERANKER_TOP_K = 12         # How many chunks to retrieve initially
-RERANKER_KEEP_TOP_K = 6      # How many best chunks to keep after reranking
-USE_RERANKER = True          # Easy toggle
-RERANKER_FUSION_ALPHA = 0.65     # 0.65 reranker + 0.35 embedding
+RERANKER_TOP_K = 12  # How many chunks to retrieve initially
+RERANKER_KEEP_TOP_K = 6  # How many best chunks to keep after reranking
+USE_RERANKER = True  # Easy toggle
+RERANKER_FUSION_ALPHA = 0.65  # 0.65 reranker + 0.35 embedding
 
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
 API_BASE_URL = os.getenv("API_BASE_URL", "http://127.0.0.1:8000")
 
 # Document Management
-DOCUMENTS_DIR = UPLOADS_DIR / "documents"   # We'll store metadata
+DOCUMENTS_DIR = UPLOADS_DIR / "documents"  # We'll store metadata

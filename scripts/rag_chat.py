@@ -16,6 +16,7 @@ logging.basicConfig(
 STORE_DIR = "storage/faiss"
 PDF_PATH = "data/sample.pdf"
 
+
 def ensure_index(embedder: HFEmbedder) -> FaissVectorStore:
     store_path = Path(STORE_DIR)
     if (store_path / "index.faiss").exists() and (store_path / "meta.jsonl").exists():
@@ -33,6 +34,7 @@ def ensure_index(embedder: HFEmbedder) -> FaissVectorStore:
     vs.add(embs, texts, metas)
     vs.save()
     return vs
+
 
 def main():
     embedder = HFEmbedder()
@@ -60,6 +62,7 @@ def main():
         for i, s in enumerate(out["sources"], 1):
             print(f"[{i}] score={s['score']:.3f} | {s['file']} p.{s['page']}")
             print(s["snippet"], "\n")
+
 
 if __name__ == "__main__":
     main()

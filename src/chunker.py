@@ -12,21 +12,19 @@ class Chunk:
 
 
 def chunk_text(
-    pages: List[Dict[str, Any]],
-    chunk_size: int,
-    chunk_overlap: int
+    pages: List[Dict[str, Any]], chunk_size: int, chunk_overlap: int
 ) -> List[Chunk]:
     """
-Character-based chunker with proper overlap across pages.
-    - Guarantees forward progress
-    - Overlaps between pages (important for continuity)
-    - Preserves original page metadata
+    Character-based chunker with proper overlap across pages.
+        - Guarantees forward progress
+        - Overlaps between pages (important for continuity)
+        - Preserves original page metadata
     """
     if chunk_overlap >= chunk_size:
         raise ValueError("chunk_overlap must be smaller than chunk_size")
 
     chunks: List[Chunk] = []
-    previous_overlap_text = ""   # Carry over text from previous page for overlap
+    previous_overlap_text = ""  # Carry over text from previous page for overlap
 
     for page in pages:
         text = (page.get("text") or "").strip()
@@ -36,7 +34,9 @@ Character-based chunker with proper overlap across pages.
             continue
 
         # Add overlap from previous page at the beginning
-        full_text = previous_overlap_text + " " + text if previous_overlap_text else text
+        full_text = (
+            previous_overlap_text + " " + text if previous_overlap_text else text
+        )
 
         n = len(full_text)
         start = 0
@@ -61,7 +61,7 @@ Character-based chunker with proper overlap across pages.
             start = max(0, end - chunk_overlap)
 
         # Save the last 'chunk_overlap' characters for the next page
-        previous_overlap_text = full_text[max(0, n - chunk_overlap):]
+        previous_overlap_text = full_text[max(0, n - chunk_overlap) :]
 
     logger.info(f"Created {len(chunks)} chunks with overlap={chunk_overlap}")
     return chunks

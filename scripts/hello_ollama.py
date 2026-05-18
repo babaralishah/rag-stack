@@ -13,6 +13,7 @@ Follow the user's instructions carefully.
 If you are unsure, say so briefly and ask a clarifying question.
 """
 
+
 def build_prompt(system_prompt: str, user_msg: str) -> str:
     return f"""System:
 {system_prompt.strip()}
@@ -22,12 +23,13 @@ User:
 
 Assistant:"""
 
+
 def ollama_generate(prompt: str, context=None, temperature: float = 0.1):
     payload = {
         "model": MODEL,
         "prompt": prompt,
-        "stream": False, # False: Wait for the full answer. True: Send words one-by-one as they generate.
-        "temperature": temperature, # 0.1 for RAG/Facts, 0.5 for Chat, 1.0 for Creative Writing
+        "stream": False,  # False: Wait for the full answer. True: Send words one-by-one as they generate.
+        "temperature": temperature,  # 0.1 for RAG/Facts, 0.5 for Chat, 1.0 for Creative Writing
     }
     if context is not None:
         payload["context"] = context
@@ -36,6 +38,7 @@ def ollama_generate(prompt: str, context=None, temperature: float = 0.1):
     r.raise_for_status()
     data = r.json()
     return data.get("response", ""), data.get("context", None)
+
 
 def main():
     global SYSTEM_PROMPT
@@ -79,12 +82,12 @@ def main():
             continue
 
         if user_msg.lower().startswith("/sys set "):
-            SYSTEM_PROMPT = user_msg[len("/sys set "):]
+            SYSTEM_PROMPT = user_msg[len("/sys set ") :]
             print("(system prompt replaced)\n")
             continue
 
         if user_msg.lower().startswith("/sys add "):
-            addition = user_msg[len("/sys add "):]
+            addition = user_msg[len("/sys add ") :]
             if SYSTEM_PROMPT and not SYSTEM_PROMPT.endswith("\n"):
                 SYSTEM_PROMPT += "\n"
             SYSTEM_PROMPT += addition + "\n"
@@ -99,7 +102,9 @@ def main():
         t.start()
 
         try:
-            reply, context = ollama_generate(prompt=prompt, context=context, temperature=temperature)
+            reply, context = ollama_generate(
+                prompt=prompt, context=context, temperature=temperature
+            )
         except requests.exceptions.ConnectionError:
             print("\nERROR: Cannot connect to Ollama at http://localhost:11434")
             print("Fix: Run `ollama serve` (or open the Ollama app).")
@@ -115,6 +120,7 @@ def main():
             t.join()
 
         print("Assistant:", reply.strip(), "\n")
+
 
 def spinner(stop_event: threading.Event, message="Assistant: thinking "):
     frames = ["|", "/", "-", "\\"]

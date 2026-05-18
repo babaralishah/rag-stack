@@ -1,12 +1,14 @@
 import logging
 from typing import List, Dict
 import numpy as np
+
 try:
     from rank_bm25 import BM25Okapi
 except Exception:
     BM25Okapi = None
 
 logger = logging.getLogger("rag")
+
 
 class HybridRetriever:
     def __init__(self):

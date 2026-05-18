@@ -30,7 +30,7 @@ def fetch_web_text(url: str) -> List[Dict[str, Any]]:
 
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-                      "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
     }
 
     resp = requests.get(url, timeout=20, headers=headers)
@@ -39,12 +39,16 @@ def fetch_web_text(url: str) -> List[Dict[str, Any]]:
     try:
         from bs4 import BeautifulSoup
     except ModuleNotFoundError as exc:
-        raise ValueError("beautifulsoup4 is required to ingest web pages. Install it with pip.") from exc
+        raise ValueError(
+            "beautifulsoup4 is required to ingest web pages. Install it with pip."
+        ) from exc
 
     soup = BeautifulSoup(resp.text, "html.parser")
     title = soup.title.string.strip() if soup.title and soup.title.string else url
 
-    for tag in soup(["script", "style", "header", "footer", "nav", "aside", "form", "noscript"]):
+    for tag in soup(
+        ["script", "style", "header", "footer", "nav", "aside", "form", "noscript"]
+    ):
         tag.decompose()
 
     body = soup.body or soup
@@ -57,16 +61,16 @@ def fetch_web_text(url: str) -> List[Dict[str, Any]]:
 
     combined = "\n\n".join(text_blocks)
     if len(combined) < 50:
-        raise ValueError("Unable to extract meaningful text from URL. Try a different page.")
+        raise ValueError(
+            "Unable to extract meaningful text from URL. Try a different page."
+        )
 
-    return [{
-        "text": combined,
-        "metadata": {
-            "title": title,
-            "source_url": url,
-            "source_type": "web"
+    return [
+        {
+            "text": combined,
+            "metadata": {"title": title, "source_url": url, "source_type": "web"},
         }
-    }]
+    ]
 
 
 def extract_youtube_id(url: str) -> str:
@@ -85,7 +89,9 @@ def extract_youtube_id(url: str) -> str:
         if len(parts) > 1:
             return parts[1].split("&")[0]
 
-    raise ValueError("Invalid YouTube URL. Please provide a standard YouTube watch or short link.")
+    raise ValueError(
+        "Invalid YouTube URL. Please provide a standard YouTube watch or short link."
+    )
 
 
 def fetch_youtube_transcript(url: str) -> List[Dict[str, Any]]:
@@ -97,12 +103,21 @@ def fetch_youtube_transcript(url: str) -> List[Dict[str, Any]]:
     video_id = extract_youtube_id(url)
 
     try:
-        from youtube_transcript_api import YouTubeTranscriptApi, TranscriptsDisabled, NoTranscriptFound, RequestBlocked
+        from youtube_transcript_api import (
+            YouTubeTranscriptApi,
+            TranscriptsDisabled,
+            NoTranscriptFound,
+            RequestBlocked,
+        )
     except ModuleNotFoundError as exc:
-        raise ValueError("youtube-transcript-api is required to ingest YouTube transcripts. Install it with pip.") from exc
+        raise ValueError(
+            "youtube-transcript-api is required to ingest YouTube transcripts. Install it with pip."
+        ) from exc
 
     try:
-        transcript = YouTubeTranscriptApi().fetch(video_id, languages=["en", "en-US", "en-GB"], preserve_formatting=False)
+        transcript = YouTubeTranscriptApi().fetch(
+            video_id, languages=["en", "en-US", "en-GB"], preserve_formatting=False
+        )
     except RequestBlocked:
         raise ValueError(
             "YouTube blocked the transcript request from this environment. "
@@ -116,21 +131,27 @@ def fetch_youtube_transcript(url: str) -> List[Dict[str, Any]]:
         logger.exception("YouTube transcript fetch failed: %s", exc)
         raise ValueError(str(exc) or "Failed to fetch transcript from YouTube.")
 
-    transcript_text = "\n".join([normalize_text(item["text"]) for item in transcript if item.get("text")])
+    transcript_text = "\n".join(
+        [normalize_text(item["text"]) for item in transcript if item.get("text")]
+    )
     if len(transcript_text) < 50:
         raise ValueError("Transcript content is too short to index.")
 
-    return [{
-        "text": transcript_text,
-        "metadata": {
-            "source_url": url,
-            "video_id": video_id,
-            "source_type": "youtube"
+    return [
+        {
+            "text": transcript_text,
+            "metadata": {
+                "source_url": url,
+                "video_id": video_id,
+                "source_type": "youtube",
+            },
         }
-    }]
+    ]
 
 
-def load_sqlite_table(db_path: str, table_name: str = "user_history") -> List[Dict[str, Any]]:
+def load_sqlite_table(
+    db_path: str, table_name: str = "user_history"
+) -> List[Dict[str, Any]]:
     """Load all rows from a SQLite table and convert each row to a page dict.
 
     Each row is formatted as "col: value" lines to make the content
@@ -150,7 +171,9 @@ def load_sqlite_table(db_path: str, table_name: str = "user_history") -> List[Di
         try:
             cursor.execute(f"SELECT * FROM {table_name} LIMIT 1")
         except sqlite3.OperationalError as exc:
-            raise ValueError(f"Table '{table_name}' does not exist in the database.") from exc
+            raise ValueError(
+                f"Table '{table_name}' does not exist in the database."
+            ) from exc
 
         columns = [col[0] for col in cursor.description]
         cursor.execute(f"SELECT * FROM {table_name}")
@@ -161,18 +184,18 @@ def load_sqlite_table(db_path: str, table_name: str = "user_history") -> List[Di
 
     pages = []
     for idx, row in enumerate(rows):
-        row_text = "\n".join(
-            f"{col}: {row[i]}" for i, col in enumerate(columns)
-        )
-        pages.append({
-            "text": row_text,
-            "metadata": {
-                "source_type": "sqlite",
-                "table_name": table_name,
-                "row_index": idx,
-                "columns": columns
+        row_text = "\n".join(f"{col}: {row[i]}" for i, col in enumerate(columns))
+        pages.append(
+            {
+                "text": row_text,
+                "metadata": {
+                    "source_type": "sqlite",
+                    "table_name": table_name,
+                    "row_index": idx,
+                    "columns": columns,
+                },
             }
-        })
+        )
 
     return pages
 

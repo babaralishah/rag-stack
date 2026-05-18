@@ -1,3 +1,9 @@
+"""Unified LLM interface for Groq and Google Gemini.
+
+This module abstracts provider selection and centralizes environment key
+handling for the app's answer generation pipeline.
+"""
+
 import os
 import logging
 from groq import Groq
@@ -11,6 +17,7 @@ client_gemini = None
 
 try:
     from google import genai
+
     GEMINI_AVAILABLE = True
     if GEMINI_API_KEY:
         client_gemini = genai.Client(api_key=GEMINI_API_KEY)
@@ -22,6 +29,7 @@ except ImportError:
 
 
 def get_groq_client():
+    """Create and return a Groq API client from environment configuration."""
     api_key = os.getenv("GROQ_API_KEY")
     if not api_key:
         raise ValueError("GROQ_API_KEY environment variable is required.")
@@ -32,7 +40,7 @@ def generate_answer(
     prompt: str,
     model: str = "llama-3.3-70b-versatile",
     temperature: float = 0.7,
-    max_tokens: int = 1024
+    max_tokens: int = 1024,
 ) -> str:
     """
     Unified LLM caller supporting Groq and Google Gemini.
@@ -41,15 +49,17 @@ def generate_answer(
         # === GEMINI ROUTE ===
         if model.startswith("gemini"):
             if not GEMINI_AVAILABLE or not client_gemini:
-                raise ValueError(f"Gemini model '{model}' requested but Gemini is not available.")
-            
+                raise ValueError(
+                    f"Gemini model '{model}' requested but Gemini is not available."
+                )
+
             response = client_gemini.models.generate_content(
                 model=model,
                 contents=prompt,
                 config=genai.types.GenerateContentConfig(
                     temperature=temperature,
                     max_output_tokens=max_tokens,
-                )
+                ),
             )
             logger.info(f"Generated using Gemini: {model}")
             return response.text.strip()
