@@ -307,7 +307,7 @@ with st.sidebar:
 
 
 # --------------------- Main Area ---------------------
-st.title("📚 RAG Assistant")
+st.title("📚 Your RAG Assistant")
 st.caption(
     "Ask questions about PDFs, web pages, SQLite tables, and video transcripts • Powered by Groq + FAISS"
 )
