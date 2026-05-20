@@ -26,7 +26,27 @@ cache_stats = {
 }
 
 
-def get_cache_key(question: str, use_hybrid=True, use_reranker=True, top_k=6):
+def _normalize_history_for_cache(history):
+    if not history:
+        return None
+
+    normalized = []
+    for message in history:
+        if isinstance(message, dict):
+            role = str(message.get("role", "")).strip().lower()
+            content = str(message.get("content", "")).strip()
+        else:
+            role = str(getattr(message, "role", "")).strip().lower()
+            content = str(getattr(message, "content", "")).strip()
+
+        if role not in {"user", "assistant"} or not content:
+            continue
+        normalized.append({"role": role, "content": content})
+
+    return normalized if normalized else None
+
+
+def get_cache_key(question: str, use_hybrid=True, use_reranker=True, top_k=6, history=None):
     """Create a stable cache key for a query configuration."""
     data = {
         "q": question.strip().lower(),
@@ -34,6 +54,19 @@ def get_cache_key(question: str, use_hybrid=True, use_reranker=True, top_k=6):
         "rerank": bool(use_reranker),
         "k": int(top_k),
     }
+
+    normalized_history = _normalize_history_for_cache(history)
+    if normalized_history:
+        history_hash = hashlib.md5(
+            json.dumps(
+                normalized_history,
+                sort_keys=True,
+                ensure_ascii=False,
+                separators=(",", ":"),
+            ).encode("utf-8")
+        ).hexdigest()
+        data["history_hash"] = history_hash
+
     return hashlib.md5(json.dumps(data, sort_keys=True).encode()).hexdigest()
 
 

@@ -32,6 +32,7 @@ from src.config import (
     MIN_SCORE,
     CHUNK_SIZE,
     CHUNK_OVERLAP,
+    CHAT_HISTORY_TURNS,
 )
 from src.utils import file_sha256
 from src.document_loader import load_pdf
@@ -163,16 +164,45 @@ def ingest_pages(
     return {"status": "ingested", "source": source_file, "chunks_added": len(texts)}
 
 
+class ChatMessage(BaseModel):
+    role: str
+    content: str
+
+
 class QueryRequest(BaseModel):
     question: str
     top_k: int = TOP_K
     use_reranker: bool = True
     use_hybrid: bool = True
+    history: Optional[List[ChatMessage]] = None
 
 
 class QueryResponse(BaseModel):
     answer: str
     sources: List[Dict[str, Any]]
+
+
+def normalize_chat_history(history: Optional[List[ChatMessage]]) -> List[Dict[str, str]]:
+    """Validate, normalize, and trim chat history for the query payload."""
+    if not history:
+        return []
+
+    normalized: List[Dict[str, str]] = []
+    for message in history:
+        role = message.role.strip().lower()
+        if role not in ("user", "assistant"):
+            raise HTTPException(
+                status_code=400,
+                detail="Chat history roles must be 'user' or 'assistant'.",
+            )
+
+        content = message.content.strip()
+        if not content:
+            continue
+
+        normalized.append({"role": role, "content": content})
+
+    return normalized[-CHAT_HISTORY_TURNS:]
 
 
 def validate_upload_extension(file_ext: str) -> None:
@@ -465,7 +495,12 @@ def search_documents(
     )
 
 
-def generate_answer_payload(question: str, retrieved: list, req: QueryRequest) -> Dict[str, Any]:
+def generate_answer_payload(
+    question: str,
+    retrieved: list,
+    req: QueryRequest,
+    history: Optional[List[Dict[str, str]]] = None,
+) -> Dict[str, Any]:
     """Generate the final answer payload from retrieval and reranking."""
     out = rag_answer(
         question=question,
@@ -473,6 +508,7 @@ def generate_answer_payload(question: str, retrieved: list, req: QueryRequest) -
         min_score=MIN_SCORE,
         use_reranker=req.use_reranker,
         final_top_k=req.top_k,
+        history=history,
     )
     return {"answer": out["answer"], "sources": out.get("sources", [])}
 
@@ -481,11 +517,13 @@ def generate_answer_payload(question: str, retrieved: list, req: QueryRequest) -
 def query(req: QueryRequest):
     """Handle query requests by validating input, checking cache, searching, and generating answers."""
     question = validate_query_text(req)
+    history = normalize_chat_history(req.history)
     cache_key = get_cache_key(
         question=question,
         use_hybrid=req.use_hybrid,
         use_reranker=req.use_reranker,
         top_k=req.top_k,
+        history=history,
     )
     cached_response = get_cached_query_response(cache_key)
     if cached_response is not None:
@@ -507,7 +545,7 @@ def query(req: QueryRequest):
             f"reranking={'enabled' if req.use_reranker else 'disabled'}"
         )
 
-        result = generate_answer_payload(question, retrieved, req)
+        result = generate_answer_payload(question, retrieved, req, history=history)
         set_cached_query(cache_key, result)
 
         logger.info(f"✅ Query cached: {question[:60]}...")

@@ -25,6 +25,7 @@ CHUNK_SIZE = 600
 EMBED_DIM = 384
 
 MIN_SIMILARITY = 0.30
+CHAT_HISTORY_TURNS = 8
 
 # Reranker Settings
 # RERANKER_MODEL = "cross-encoder/ms-marco-MiniLM-L-6-v2"

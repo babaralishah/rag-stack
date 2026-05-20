@@ -1,6 +1,6 @@
 import logging
-from typing import List, Dict, Any
-from src.config import MAX_CHARS, RERANKER_FUSION_ALPHA
+from typing import List, Dict, Any, Optional
+from src.config import MAX_CHARS, RERANKER_FUSION_ALPHA, CHAT_HISTORY_TURNS
 from src.hosted_llm import generate_answer
 from src.reranker import get_reranker
 
@@ -30,12 +30,41 @@ def build_context(results: List[Dict[str, Any]], max_chars: int = MAX_CHARS) -> 
     return "\n".join(parts).strip()
 
 
+def build_history_section(
+    history: Optional[List[Dict[str, str]]], max_turns: int = CHAT_HISTORY_TURNS
+) -> str:
+    """Build a simple conversation history section from the last chat turns."""
+    if not history:
+        return ""
+
+    normalized = [
+        {
+            "role": str(item.get("role", "")).strip().lower(),
+            "content": str(item.get("content", "")).strip(),
+        }
+        for item in history
+        if item.get("content", "").strip()
+    ]
+
+    if not normalized:
+        return ""
+
+    normalized = normalized[-max_turns:]
+    lines = []
+    for msg in normalized:
+        role = "Assistant" if msg["role"] == "assistant" else "User"
+        lines.append(f"{role}: {msg['content']}")
+
+    return "Conversation history:\n" + "\n".join(lines)
+
+
 def rag_answer(
     question: str,
     retrieved: List[Dict[str, Any]],
     min_score: float = 0.35,
     use_reranker: bool = True,
     final_top_k: int = 5,
+    history: Optional[List[Dict[str, str]]] = None,
 ) -> Dict[str, Any]:
     """
     Generate an answer for `question` using `retrieved` document chunks.
@@ -86,6 +115,9 @@ def rag_answer(
 
     # Build context
     context = build_context(retrieved)
+    history_block = build_history_section(history)
+    if history_block:
+        history_block = history_block + "\n\n"
 
     # chain-of-thought prompt guidance
     # Final Prompt with Few-Shot
@@ -93,6 +125,7 @@ def rag_answer(
 
 **Instructions:**
 - Think through the relevant information step by step before giving your final answer.
+- Use the conversation history to resolve follow-up questions and references.
 - Use the context to answer the question whenever possible.
 - If the context contains relevant information, answer directly from it.
 - Only say "I don't have sufficient information in the uploaded documents to answer this accurately." when the context truly lacks the answer.
@@ -111,7 +144,7 @@ Answer: The document is about building a Local RAG application using FastAPI, St
 
 Now answer the real question:
 
-CONTEXT:
+{history_block}CONTEXT:
 {context}
 
 QUESTION: {question}
