@@ -523,7 +523,6 @@ def query(req: QueryRequest):
         use_hybrid=req.use_hybrid,
         use_reranker=req.use_reranker,
         top_k=req.top_k,
-        history=history,
     )
     cached_response = get_cached_query_response(cache_key)
     if cached_response is not None:

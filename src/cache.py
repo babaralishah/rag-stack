@@ -44,29 +44,22 @@ def _normalize_history_for_cache(history):
         normalized.append({"role": role, "content": content})
 
     return normalized if normalized else None
+def get_cache_key(question: str, use_hybrid=True, use_reranker=True, top_k=6):
+    """Create a stable cache key for a query configuration.
 
-
-def get_cache_key(question: str, use_hybrid=True, use_reranker=True, top_k=6, history=None):
-    """Create a stable cache key for a query configuration."""
+    Note: Conversation history is intentionally NOT included in the cache key
+    to preserve the original caching behaviour (same question + config -> hit).
+    Including full chat history caused near-zero cache hits because history
+    changes every turn. If you want history-aware caching later, add a
+    dedicated, stable fingerprint (e.g. last user turn) instead of the full
+    transcript.
+    """
     data = {
         "q": question.strip().lower(),
         "hybrid": bool(use_hybrid),
         "rerank": bool(use_reranker),
         "k": int(top_k),
     }
-
-    normalized_history = _normalize_history_for_cache(history)
-    if normalized_history:
-        history_hash = hashlib.md5(
-            json.dumps(
-                normalized_history,
-                sort_keys=True,
-                ensure_ascii=False,
-                separators=(",", ":"),
-            ).encode("utf-8")
-        ).hexdigest()
-        data["history_hash"] = history_hash
-
     return hashlib.md5(json.dumps(data, sort_keys=True).encode()).hexdigest()
 
 
