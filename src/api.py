@@ -40,6 +40,7 @@ from src.chunker import chunk_text
 from src.embedder import HFEmbedder
 from src.vector_store import FaissVectorStore
 from src.rag_pipeline import rag_answer
+from src.evaluator import compute_ragas_metrics
 from src.source_loader import (
     fetch_web_text,
     fetch_youtube_transcript,
@@ -177,9 +178,21 @@ class QueryRequest(BaseModel):
     history: Optional[List[ChatMessage]] = None
 
 
+class EvaluationMetrics(BaseModel):
+    ragas_score: float
+    source_confidence: float
+    max_source_score: float
+    source_support: float
+    source_count: int
+    label: str
+    warnings: List[str]
+    reference_scores: Optional[Dict[str, float]] = None
+
+
 class QueryResponse(BaseModel):
     answer: str
     sources: List[Dict[str, Any]]
+    evaluation: Optional[EvaluationMetrics] = None
 
 
 def normalize_chat_history(history: Optional[List[ChatMessage]]) -> List[Dict[str, str]]:
@@ -461,7 +474,11 @@ def get_cached_query_response(cache_key: str) -> QueryResponse | None:
         return None
 
     logger.info(f"🔄 QUERY CACHE HIT: {cache_key[:70]}...")
-    return QueryResponse(answer=cached["answer"], sources=cached.get("sources", []))
+    return QueryResponse(
+        answer=cached["answer"],
+        sources=cached.get("sources", []),
+        evaluation=cached.get("evaluation"),
+    )
 
 
 def load_search_store() -> FaissVectorStore | None:
@@ -510,7 +527,17 @@ def generate_answer_payload(
         final_top_k=req.top_k,
         history=history,
     )
-    return {"answer": out["answer"], "sources": out.get("sources", [])}
+
+    evaluation = compute_ragas_metrics(
+        answer=out["answer"],
+        sources=out.get("sources", []),
+    )
+
+    return {
+        "answer": out["answer"],
+        "sources": out.get("sources", []),
+        "evaluation": evaluation,
+    }
 
 
 @app.post("/query", response_model=QueryResponse)
@@ -552,6 +579,23 @@ def query(req: QueryRequest):
     except Exception:
         logger.exception("Query failed")
         raise HTTPException(status_code=500, detail="Internal server error")
+
+
+class EvaluationRequest(BaseModel):
+    answer: str
+    sources: List[Dict[str, Any]]
+    reference: Optional[str] = None
+
+
+@app.post("/evaluate", response_model=EvaluationMetrics)
+def evaluate_answer(req: EvaluationRequest):
+    """Evaluate a RAG answer with support and optional reference comparison."""
+    evaluation = compute_ragas_metrics(
+        answer=req.answer,
+        sources=req.sources,
+        reference=req.reference,
+    )
+    return EvaluationMetrics(**evaluation)
 
 
 class DocumentResponse(BaseModel):

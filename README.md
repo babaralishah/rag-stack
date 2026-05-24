@@ -33,6 +33,7 @@ No paid APIs required.
 - Persistent FAISS vector store
 - Similarity search (top-k retrieval)
 - Guardrail for low-confidence answers
+- Evaluation metrics for answer quality (RAGAS-style score, source support, confidence)
 - Context-grounded LLM responses
 - Source citations (file + page + snippet)
 - Clean modular architecture

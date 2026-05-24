@@ -344,10 +344,16 @@ if question:
 
             answer = data.get("answer", "Sorry, I couldn't generate an answer.")
             sources = data.get("sources", [])
+            evaluation = data.get("evaluation", {})
 
             # Add assistant message
             st.session_state.chat_history.append(
-                {"role": "assistant", "content": answer, "sources": sources}
+                {
+                    "role": "assistant",
+                    "content": answer,
+                    "sources": sources,
+                    "evaluation": evaluation,
+                }
             )
 
         except Exception as e:
@@ -365,6 +371,29 @@ for message in st.session_state.chat_history:
     else:  # assistant
         with st.chat_message("assistant"):
             st.markdown(message["content"])
+
+            evaluation = message.get("evaluation") or {}
+            if evaluation:
+                with st.expander("📊 Answer Quality", expanded=False):
+                    st.metric(
+                        "RAGAS Score",
+                        f"{evaluation.get('ragas_score', 0) * 100:.1f}%",
+                        help="A combined answer quality score based on retrieval confidence and source support.",
+                    )
+                    st.metric(
+                        "Support Coverage",
+                        f"{evaluation.get('source_support', 0) * 100:.1f}%",
+                        help="How much of the answer matches the retrieved source snippets.",
+                    )
+                    st.metric(
+                        "Source Confidence",
+                        f"{evaluation.get('source_confidence', 0) * 100:.1f}%",
+                        help="Average final source relevance score from the retrieved citations.",
+                    )
+                    st.markdown(
+                        f"**Label:** {evaluation.get('label', 'unknown').title()}  \\"
+                        f"**Warnings:** {', '.join(evaluation.get('warnings', [])) or 'none'}"
+                    )
 
             # Sources Section
             if message.get("sources"):
