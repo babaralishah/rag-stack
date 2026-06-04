@@ -1,6 +1,9 @@
 import logging
 from sentence_transformers import SentenceTransformer
 
+# Import the dynamically set model name from your central config file
+from config import EMBED_MODEL
+
 logger = logging.getLogger("rag")
 
 
@@ -11,12 +14,14 @@ class HFEmbedder:
     - Exposes `embed_query` and `embed_texts` helpers used by the pipeline.
     """
 
-    def __init__(self, model_name: str = "sentence-transformers/all-MiniLM-L6-v2"):
+    def __init__(self, model_name: str = EMBED_MODEL):
+        # The default model name is now pulled directly from your config
         self.model_name = model_name
         self.model = None
 
     def _load_model(self):
         if self.model is None:
+            logger.info(f"Loading embedding model: {self.model_name}...")
             self.model = SentenceTransformer(self.model_name)
             logger.info("Embedding model loaded successfully")
         return self.model
@@ -40,5 +45,9 @@ class HFEmbedder:
         """
         if not texts:
             return None
+        
         model = self._load_model()
-        return model.encode(texts, normalize_embeddings=True, batch_size=32)
+        
+        # Lowered batch_size to 16 since bge-large-en-v1.5 is a heavier model 
+        # and requires significantly more RAM/VRAM memory per batch.
+        return model.encode(texts, normalize_embeddings=True, batch_size=16)
