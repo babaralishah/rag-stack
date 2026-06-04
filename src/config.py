@@ -24,7 +24,9 @@ CHUNK_OVERLAP = 120
 CHUNK_SIZE = 600
 
 # EMBED_DIM = 384
-EMBED_DIM = 1024
+# EMBED_DIM = 1024
+# Dynamic dimensions based on the active model
+EMBED_DIM = 1024 if "bge-large" in EMBED_MODEL else 384
 
 MIN_SIMILARITY = 0.30
 CHAT_HISTORY_TURNS = 8
