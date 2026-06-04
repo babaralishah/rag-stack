@@ -2,7 +2,7 @@ import logging
 from sentence_transformers import SentenceTransformer
 
 # Import the dynamically set model name from your central config file
-from config import EMBED_MODEL
+from src.config import EMBED_MODEL
 
 logger = logging.getLogger("rag")
 
