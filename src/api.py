@@ -131,6 +131,7 @@ def compute_source_hash(source_value: str) -> str:
     return hashlib.sha256(source_value.encode("utf-8")).hexdigest()
 
 
+# web page URLs, YouTube transcripts, and SQL tables.
 def ingest_pages(
     pages: List[Dict[str, Any]],
     source_file: str,
@@ -284,6 +285,7 @@ def parse_upload_file_to_pages(
     ]
 
 
+# PDFs or text files
 def ingest_upload_pages(
     pages: List[Dict[str, Any]], file_hash: str, filename: str, file_ext: str
 ) -> Dict[str, Any]:
