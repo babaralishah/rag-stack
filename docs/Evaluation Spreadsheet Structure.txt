@@ -1,0 +1,209 @@
+Babar, that's a lot of content (50 questions + answers + chunks + spreadsheet + paper tables). The most useful way is to build it systematically.
+
+## 1. Evaluation Spreadsheet Structure
+
+Create a spreadsheet with these columns:
+
+| Query_ID | Category | Version | User_Query | Expected_Source | Ground_Truth_Answer | Retrieved_Chunks | Retrieval_Confidence | Retrieval_Relevance(1-5) | Support_Coverage | Groundedness(1-5) | Abstained(Y/N) | Abstention_Correct(Y/N) | Final_Answer |
+| -------- | -------- | ------- | ---------- | --------------- | ------------------- | ---------------- | -------------------- | ------------------------ | ---------------- | ----------------- | -------------- | ----------------------- | ------------ |
+
+---
+
+# 2. Full 50-Question Evaluation Dataset
+
+## Direct Queries (Q1-Q20)
+
+| ID  | Query                                                        | Source  |
+| --- | ------------------------------------------------------------ | ------- |
+| Q1  | How many annual leave days do employees receive?             | HR-01   |
+| Q2  | How many leave days can be carried forward?                  | HR-01   |
+| Q3  | How many days in advance should leave requests be submitted? | HR-01   |
+| Q4  | Who must approve annual leave requests?                      | HR-01   |
+| Q5  | How many remote work days are allowed each week?             | HR-02   |
+| Q6  | What are the core working hours for remote workers?          | HR-02   |
+| Q7  | Who approved the remote work policy?                         | HR-02   |
+| Q8  | How many sick leave days are provided annually?              | HR-03   |
+| Q9  | When is medical documentation required?                      | HR-03   |
+| Q10 | Can unused sick leave be converted into cash?                | HR-03   |
+| Q11 | How much maternity leave is offered?                         | HR-04   |
+| Q12 | How much paternity leave is offered?                         | HR-04   |
+| Q13 | How many reviewers must approve a pull request?              | ENG-01  |
+| Q14 | Can engineers commit directly to main?                       | ENG-01  |
+| Q15 | Which branch should feature branches originate from?         | ENG-01  |
+| Q16 | What authentication protocol does the API use?               | ENG-03  |
+| Q17 | How long do access tokens remain valid?                      | ENG-03  |
+| Q18 | How often must passwords be rotated?                         | SEC-01  |
+| Q19 | Is MFA mandatory?                                            | SEC-01  |
+| Q20 | Who is the CEO of the company?                               | COMP-01 |
+
+---
+
+## Vague Queries (Q21-Q30)
+
+| ID  | Query                          | Expected Rewrite Intent |
+| --- | ------------------------------ | ----------------------- |
+| Q21 | tell me about that leave thing | Annual leave policy     |
+| Q22 | what's the work from home rule | Remote work policy      |
+| Q23 | explain the approval process   | Pull request approvals  |
+| Q24 | password requirements?         | Password policy         |
+| Q25 | what do we use for login       | API authentication      |
+| Q26 | how long do we keep records    | Data retention          |
+| Q27 | tell me about the company boss | CEO                     |
+| Q28 | that remote policy thing       | Remote work policy      |
+| Q29 | explain the deployment process | CI/CD                   |
+| Q30 | how does the token thing work  | API tokens              |
+
+---
+
+## Conversational Queries (Q31-Q40)
+
+| ID  | Query Sequence                        |
+| --- | ------------------------------------- |
+| Q31 | Who is the CEO?                       |
+| Q32 | When was the company founded?         |
+| Q33 | Who is the CTO?                       |
+| Q34 | Where is the company headquartered?   |
+| Q35 | Tell me about the remote work policy. |
+| Q36 | Who approved it?                      |
+| Q37 | Explain API authentication.           |
+| Q38 | How long do they last?                |
+| Q39 | Tell me about annual leave.           |
+| Q40 | Who approves those requests?          |
+
+Memory should be necessary for:
+
+* Q36 ("it")
+* Q38 ("they")
+* Q40 ("those")
+
+---
+
+## Out-of-Bounds Queries (Q41-Q50)
+
+| ID  | Query                               |
+| --- | ----------------------------------- |
+| Q41 | How do I bake a chocolate cake?     |
+| Q42 | Who won the FIFA World Cup?         |
+| Q43 | What's the weather in Dublin today? |
+| Q44 | Solve x² + 4x + 4                   |
+| Q45 | Tell me about Bitcoin investing     |
+| Q46 | How do I train a Labrador puppy?    |
+| Q47 | Best camera under $1000             |
+| Q48 | Explain quantum entanglement        |
+| Q49 | Who is the current US president?    |
+| Q50 | Give me a recipe for biryani        |
+
+Expected result:
+
+**Abstain**
+
+---
+
+# 3. Ground Truth Answers
+
+Examples:
+
+| Query | Ground Truth                                                |
+| ----- | ----------------------------------------------------------- |
+| Q1    | Employees receive 25 days of paid annual leave annually.    |
+| Q5    | Employees may work remotely up to 3 days per week.          |
+| Q13   | Pull requests require approval from at least two reviewers. |
+| Q16   | OAuth 2.0 is used for API authentication.                   |
+| Q18   | Passwords must be rotated every 90 days.                    |
+| Q20   | Michael O'Brien is the CEO.                                 |
+
+For your paper, create one ground-truth answer per question.
+
+---
+
+# 4. Expected Retrieval Chunks
+
+Use document IDs.
+
+| Query   | Expected Chunk Source     |
+| ------- | ------------------------- |
+| Q1-Q4   | HR-01                     |
+| Q5-Q7   | HR-02                     |
+| Q8-Q10  | HR-03                     |
+| Q11-Q12 | HR-04                     |
+| Q13-Q15 | ENG-01                    |
+| Q16-Q17 | ENG-03                    |
+| Q18-Q19 | SEC-01                    |
+| Q20     | COMP-01                   |
+| Q21-Q30 | Same source after rewrite |
+| Q31-Q40 | Memory-dependent source   |
+| Q41-Q50 | None                      |
+
+For OOB queries:
+
+Expected Chunk = None
+
+Expected Answer = Abstain
+
+---
+
+# 5. Paper Results Tables
+
+### Table A — Retrieval Performance
+
+| Version | Avg Retrieval Confidence |
+| ------- | ------------------------ |
+| V1      |                          |
+| V2      |                          |
+| V3      |                          |
+| V4      |                          |
+| V5      |                          |
+| V6      |                          |
+
+---
+
+### Table B — Groundedness
+
+| Version | Avg Support Coverage |
+| ------- | -------------------- |
+| V1      |                      |
+| V2      |                      |
+| V3      |                      |
+| V4      |                      |
+| V5      |                      |
+| V6      |                      |
+
+---
+
+### Table C — Abstention Accuracy
+
+| Version | Correct Abstentions |
+| ------- | ------------------- |
+| V1      |                     |
+| V2      |                     |
+| V3      |                     |
+| V4      |                     |
+| V5      |                     |
+| V6      |                     |
+
+---
+
+### Table D — Query Category Performance
+
+| Category       | V1 | V2 | V3 | V4 | V5 | V6 |
+| -------------- | -- | -- | -- | -- | -- | -- |
+| Direct         |    |    |    |    |    |    |
+| Vague          |    |    |    |    |    |    |
+| Conversational |    |    |    |    |    |    |
+| Out-of-Bounds  |    |    |    |    |    |    |
+
+---
+
+### Expected Paper Hypothesis
+
+Your paper should ideally show:
+
+| Feature         | Expected Impact                             |
+| --------------- | ------------------------------------------- |
+| Query Rewriting | Largest improvement                         |
+| Memory          | Large improvement on conversational queries |
+| Hybrid Search   | Moderate improvement                        |
+| Reranking       | Moderate improvement                        |
+| Guardrails      | Largest improvement in abstention accuracy  |
+
+This is actually enough to run a complete ablation study for a first research paper and generate publishable-looking experimental results.
