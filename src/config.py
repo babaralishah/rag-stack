@@ -47,6 +47,9 @@ PHASE_FLAGS = {
         "use_chat_history": False,
         "use_reranker": False,
         "use_guardrails": False,
+        "use_cache": False,
+        "use_cot": False,
+        "use_few_shot": False,
     },
     "V2": {
         "use_query_rewriter": True,
@@ -54,6 +57,9 @@ PHASE_FLAGS = {
         "use_chat_history": False,
         "use_reranker": False,
         "use_guardrails": False,
+        "use_cache": False,
+        "use_cot": False,
+        "use_few_shot": False,
     },
     "V3": {
         "use_query_rewriter": True,
@@ -61,6 +67,9 @@ PHASE_FLAGS = {
         "use_chat_history": True,
         "use_reranker": False,
         "use_guardrails": False,
+        "use_cache": False,
+        "use_cot": False,
+        "use_few_shot": False,
     },
     "V4": {
         "use_query_rewriter": True,
@@ -68,6 +77,9 @@ PHASE_FLAGS = {
         "use_chat_history": True,
         "use_reranker": False,
         "use_guardrails": False,
+        "use_cache": False,
+        "use_cot": False,
+        "use_few_shot": False,
     },
     "V5": {
         "use_query_rewriter": True,
@@ -75,6 +87,9 @@ PHASE_FLAGS = {
         "use_chat_history": True,
         "use_reranker": True,
         "use_guardrails": False,
+        "use_cache": False,
+        "use_cot": False,
+        "use_few_shot": False,
     },
     "V6": {
         "use_query_rewriter": True,
@@ -82,6 +97,9 @@ PHASE_FLAGS = {
         "use_chat_history": True,
         "use_reranker": True,
         "use_guardrails": True,
+        "use_cache": True,
+        "use_cot": True,
+        "use_few_shot": True,
     },
 }
 

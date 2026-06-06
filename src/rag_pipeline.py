@@ -65,6 +65,8 @@ def rag_answer(
     use_reranker: bool = True,
     final_top_k: int = 5,
     use_guardrails: bool = False,
+    use_cot: bool = True,
+    use_few_shot: bool = True,
     history: Optional[List[Dict[str, str]]] = None,
 ) -> Dict[str, Any]:
     """
@@ -137,37 +139,36 @@ def rag_answer(
     if history_block:
         history_block = history_block + "\n\n"
 
-    # chain-of-thought prompt guidance
-    # Final Prompt with Few-Shot
-    prompt = f"""You are a careful, honest, and helpful assistant. Answer using **only** the provided context.
+    # Build the prompt dynamically based on flags
+    instructions = [
+        "You are a careful, honest, and helpful assistant. Answer using only the provided context.",
+        "Use the context to answer the question whenever possible.",
+        "Do not hallucinate or invent facts beyond the context.",
+    ]
 
-**Instructions:**
-- Think through the relevant information step by step before giving your final answer.
-- Use the conversation history to resolve follow-up questions and references.
-- Use the context to answer the question whenever possible.
-- If the context contains relevant information, answer directly from it.
-- Only say "I don't have sufficient information in the uploaded documents to answer this accurately." when the context truly lacks the answer.
-- Do not hallucinate or invent facts beyond the context.
-- If the context contains database rows, tables, or schema details, use them to answer the question.
+    # If chain-of-thought is requested, add reasoning guidance
+    if use_cot:
+        instructions.append(
+            "Think through the relevant information step by step before giving your final answer."
+        )
 
-**Reasoning guidance:**
-- First show a short reasoning trace explaining how the context supports the answer.
-- Then clearly label the final response with "Final answer:".
+    # Always optionally mention history usage (history_block is empty if not enabled)
+    if history_block:
+        instructions.append("Use the conversation history to resolve follow-up questions and references.")
 
-**Examples:**
+    # Compose the prompt
+    prompt_parts = ["\n".join(instructions)]
 
-Question: What is the main topic of this document?
-Context: [Document about RAG system]
-Answer: The document is about building a Local RAG application using FastAPI, Streamlit, and FAISS.
+    # Add few-shot examples only when enabled
+    if use_few_shot:
+        prompt_parts.append(
+            "Examples:\n\nQuestion: What is the main topic of this document?\nContext: [Document about RAG system]\nAnswer: The document is about building a Local RAG application using FastAPI, Streamlit, and FAISS.\n"
+        )
 
-Now answer the real question:
+    prompt_parts.append("Now answer the real question:")
+    prompt_parts.append(f"{history_block}CONTEXT:\n{context}\n\nQUESTION: {question}\n\nANSWER:")
 
-{history_block}CONTEXT:
-{context}
-
-QUESTION: {question}
-
-ANSWER:"""
+    prompt = "\n\n".join(prompt_parts)
 
     answer = generate_answer(prompt, temperature=0.1)  # Low temperature = more grounded
 

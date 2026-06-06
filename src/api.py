@@ -520,14 +520,14 @@ def load_search_store() -> FaissVectorStore | None:
     return load_or_create_store(dim=EMBED_DIM)
 
 
-def rewrite_and_embed_query(question: str, use_query_rewriter: bool = True) -> tuple[str, Any]:
-    """Rewrite the user question and embed it for retrieval."""
+def rewrite_and_embed_query(question: str, use_query_rewriter: bool = True, history: list | None = None) -> tuple[str, Any]:
+    """Rewrite the user question (optionally using recent history) and embed it for retrieval."""
     if not use_query_rewriter:
         return question, get_embedder().embed_query(question)
 
     from src.query_rewriter import rewrite_query
 
-    rewritten = rewrite_query(question)
+    rewritten = rewrite_query(question, history=history)
     query_vector = get_embedder().embed_query(rewritten)
     return rewritten, query_vector
 
@@ -562,9 +562,11 @@ def generate_answer_payload(
         question=question,
         retrieved=retrieved,
         min_score=MIN_SCORE,
-        use_reranker=flags["use_reranker"],
+        use_reranker=flags.get("use_reranker", True),
         final_top_k=req.top_k,
-        use_guardrails=flags["use_guardrails"],
+        use_guardrails=flags.get("use_guardrails", False),
+        use_cot=flags.get("use_cot", False),
+        use_few_shot=flags.get("use_few_shot", False),
         history=history,
     )
 
@@ -584,17 +586,26 @@ def generate_answer_payload(
 def query(req: QueryRequest):
     """Handle query requests by validating input, checking cache, searching, and generating answers."""
     question = validate_query_text(req)
-    history = normalize_chat_history(req.history)
-    cache_key = get_cache_key(
-        question=question,
-        use_hybrid=req.use_hybrid,
-        use_reranker=req.use_reranker,
-        top_k=req.top_k,
-        phase=req.phase,
-    )
-    cached_response = get_cached_query_response(cache_key)
-    if cached_response is not None:
-        return cached_response
+
+    # Resolve phase flags early so we can honor cache and retrieval behavior
+    flags = get_query_settings(req)
+
+    # Normalize history only if enabled by phase flags
+    history = normalize_chat_history(req.history) if flags.get("use_chat_history") else []
+
+    # Only compute and consult cache when the active phase enables it
+    cached_response = None
+    if flags.get("use_cache"):
+        cache_key = get_cache_key(
+            question=question,
+            use_hybrid=flags.get("use_hybrid", req.use_hybrid),
+            use_reranker=flags.get("use_reranker", req.use_reranker),
+            top_k=req.top_k,
+            phase=req.phase,
+        )
+        cached_response = get_cached_query_response(cache_key)
+        if cached_response is not None:
+            return cached_response
 
     try:
         store = load_search_store()
@@ -604,10 +615,11 @@ def query(req: QueryRequest):
                 sources=[],
             )
 
-        flags = get_query_settings(req)
-        history = normalize_chat_history(req.history) if flags["use_chat_history"] else []
+        # flags already resolved above
         query_text, query_vector = rewrite_and_embed_query(
-            question, use_query_rewriter=flags["use_query_rewriter"]
+            question,
+            use_query_rewriter=flags.get("use_query_rewriter", True),
+            history=history if flags.get("use_chat_history") else None,
         )
         retrieved = search_documents(
             store,
@@ -624,7 +636,12 @@ def query(req: QueryRequest):
         )
 
         result = generate_answer_payload(question, retrieved, req, flags, history=history)
-        set_cached_query(cache_key, result)
+        # Cache only when enabled
+        if flags.get("use_cache"):
+            try:
+                set_cached_query(cache_key, result)
+            except Exception:
+                logger.warning("Failed to set cache entry; continuing without cache")
 
         logger.info(f"✅ Query cached: {question[:60]}...")
         return QueryResponse(**result)

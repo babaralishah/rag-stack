@@ -4,7 +4,7 @@ from src.hosted_llm import generate_answer
 logger = logging.getLogger("rag")
 
 
-def rewrite_query(original_question: str) -> str:
+def rewrite_query(original_question: str, history: list | None = None) -> str:
     """
     Advanced Query Rewriter - Makes the question much better for retrieval.
     """
@@ -17,34 +17,36 @@ def rewrite_query(original_question: str) -> str:
         )
         return original_question
 
+    # Include recent history when available to disambiguate pronouns or references
+    history_block = ""
+    if history and isinstance(history, list):
+        # Keep only the last 3 turns for context
+        last_turns = history[-4:]
+        history_lines = []
+        for m in last_turns:
+            role = m.get("role", "user")
+            content = m.get("content", "").strip()
+            if content:
+                history_lines.append(f"{role.title()}: {content}")
+        if history_lines:
+            history_block = "Conversation history:\n" + "\n".join(history_lines) + "\n\n"
+
     prompt = f"""You are an expert RAG Query Optimizer. Your job is to rewrite the user's question for retrieval,
 while preserving the original meaning exactly and without adding any new topics, entities, or assumptions.
 
+If the user's question is already unambiguous and sufficient for retrieval, simply return it unchanged.
+
+When available, use the recent conversation history to resolve pronouns or references. Use only the last few turns:
+{history_block}
 Original Question: {original_question}
 
 Rewrite the question with these goals:
 - Keep the same meaning and focus as the original question
 - Do not invent or add any details, topics, or domain-specific assumptions
-- Do not add information about customers, sales, demographics, product preferences, or other entities
-  unless the original question explicitly mentioned them
 - Keep it as ONE single, natural question
 - Do not answer the question, only rewrite it
 
-Examples:
-Original: "what is this"
-Rewritten: "What is the main topic and purpose of this document?"
-
-Original: "tell me about project"
-Rewritten: "What is the Local RAG project? Summarize its architecture, key components, and main features."
-
-Original: "experience"
-Rewritten: "What is the professional experience and work history mentioned in this resume?"
-
-Original: "what does this db says"
-Rewritten: "What information does this database contain?"
-
-Now rewrite the following question:
-
+Return only the rewritten question (or the original if no rewrite is needed):
 Rewritten Question:"""
 
     try:
