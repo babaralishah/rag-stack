@@ -33,6 +33,7 @@ from src.config import (
     CHUNK_SIZE,
     CHUNK_OVERLAP,
     CHAT_HISTORY_TURNS,
+    PHASE_FLAGS,
 )
 from src.utils import file_sha256
 from src.document_loader import load_pdf
@@ -176,7 +177,34 @@ class QueryRequest(BaseModel):
     top_k: int = TOP_K
     use_reranker: bool = True
     use_hybrid: bool = True
+    phase: Optional[str] = None
     history: Optional[List[ChatMessage]] = None
+
+
+def resolve_phase_flags(phase: Optional[str]) -> Dict[str, bool]:
+    if not phase:
+        return {}
+
+    phase_key = phase.strip().upper()
+    if phase_key not in PHASE_FLAGS:
+        logger.warning("Unknown phase '%s', falling back to runtime toggles.", phase_key)
+        return {}
+
+    return PHASE_FLAGS[phase_key].copy()
+
+
+def get_query_settings(req: QueryRequest) -> Dict[str, bool]:
+    phase_settings = resolve_phase_flags(req.phase)
+    if phase_settings:
+        return phase_settings
+
+    return {
+        "use_query_rewriter": True,
+        "use_hybrid": req.use_hybrid,
+        "use_reranker": req.use_reranker,
+        "use_chat_history": True,
+        "use_guardrails": False,
+    }
 
 
 class EvaluationMetrics(BaseModel):
@@ -492,8 +520,11 @@ def load_search_store() -> FaissVectorStore | None:
     return load_or_create_store(dim=EMBED_DIM)
 
 
-def rewrite_and_embed_query(question: str) -> tuple[str, Any]:
+def rewrite_and_embed_query(question: str, use_query_rewriter: bool = True) -> tuple[str, Any]:
     """Rewrite the user question and embed it for retrieval."""
+    if not use_query_rewriter:
+        return question, get_embedder().embed_query(question)
+
     from src.query_rewriter import rewrite_query
 
     rewritten = rewrite_query(question)
@@ -502,15 +533,20 @@ def rewrite_and_embed_query(question: str) -> tuple[str, Any]:
 
 
 def search_documents(
-    store: FaissVectorStore, rewritten_query: str, query_vector: Any, req: QueryRequest
+    store: FaissVectorStore,
+    query_text: str,
+    query_vector: Any,
+    top_k: int,
+    use_hybrid: bool,
+    use_reranker: bool,
 ) -> list:
     """Search the vector store with optional hybrid retrieval and reranking candidate count."""
-    retrieve_k = RERANKER_TOP_K if req.use_reranker else req.top_k
+    retrieve_k = RERANKER_TOP_K if use_reranker else top_k
     return store.search(
         query_vec=query_vector,
-        query_text=rewritten_query,
+        query_text=query_text,
         top_k=retrieve_k,
-        use_hybrid=req.use_hybrid,
+        use_hybrid=use_hybrid,
     )
 
 
@@ -518,6 +554,7 @@ def generate_answer_payload(
     question: str,
     retrieved: list,
     req: QueryRequest,
+    flags: Dict[str, bool],
     history: Optional[List[Dict[str, str]]] = None,
 ) -> Dict[str, Any]:
     """Generate the final answer payload from retrieval and reranking."""
@@ -525,8 +562,9 @@ def generate_answer_payload(
         question=question,
         retrieved=retrieved,
         min_score=MIN_SCORE,
-        use_reranker=req.use_reranker,
+        use_reranker=flags["use_reranker"],
         final_top_k=req.top_k,
+        use_guardrails=flags["use_guardrails"],
         history=history,
     )
 
@@ -552,6 +590,7 @@ def query(req: QueryRequest):
         use_hybrid=req.use_hybrid,
         use_reranker=req.use_reranker,
         top_k=req.top_k,
+        phase=req.phase,
     )
     cached_response = get_cached_query_response(cache_key)
     if cached_response is not None:
@@ -565,15 +604,26 @@ def query(req: QueryRequest):
                 sources=[],
             )
 
-        rewritten_query, query_vector = rewrite_and_embed_query(question)
-        retrieved = search_documents(store, rewritten_query, query_vector, req)
+        flags = get_query_settings(req)
+        history = normalize_chat_history(req.history) if flags["use_chat_history"] else []
+        query_text, query_vector = rewrite_and_embed_query(
+            question, use_query_rewriter=flags["use_query_rewriter"]
+        )
+        retrieved = search_documents(
+            store,
+            query_text,
+            query_vector,
+            top_k=req.top_k,
+            use_hybrid=flags["use_hybrid"],
+            use_reranker=flags["use_reranker"],
+        )
 
         logger.info(
             f"Retrieved {len(retrieved)} chunks, user requested top_k={req.top_k}, "
-            f"reranking={'enabled' if req.use_reranker else 'disabled'}"
+            f"reranking={'enabled' if flags['use_reranker'] else 'disabled'}"
         )
 
-        result = generate_answer_payload(question, retrieved, req, history=history)
+        result = generate_answer_payload(question, retrieved, req, flags, history=history)
         set_cached_query(cache_key, result)
 
         logger.info(f"✅ Query cached: {question[:60]}...")

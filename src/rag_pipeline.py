@@ -64,6 +64,7 @@ def rag_answer(
     min_score: float = 0.35,
     use_reranker: bool = True,
     final_top_k: int = 5,
+    use_guardrails: bool = False,
     history: Optional[List[Dict[str, str]]] = None,
 ) -> Dict[str, Any]:
     """
@@ -101,6 +102,23 @@ def rag_answer(
 
     # Safety limit
     retrieved = retrieved[:final_top_k]
+
+    # Guardrail: abstain if retrieved documents are low-confidence
+    if use_guardrails and retrieved:
+        max_score = max((r.get("score", 0.0) for r in retrieved), default=0.0)
+        if max_score < min_score:
+            logger.warning(
+                "Guardrail triggered: max retrieved score %.3f is below threshold %.3f",
+                max_score,
+                min_score,
+            )
+            return {
+                "answer": (
+                    "I don't have enough high-confidence information from the documents "
+                    "to answer that accurately."
+                ),
+                "sources": [],
+            }
 
     # Case 1: No results
     if not retrieved:
