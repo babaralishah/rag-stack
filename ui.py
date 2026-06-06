@@ -271,6 +271,16 @@ with st.sidebar:
         "Number of chunks to retrieve", min_value=3, max_value=15, value=6, step=1
     )
 
+    # ==================== ABLATION STUDY PHASES ====================
+    st.divider()
+    st.subheader("🧪 Ablation Study Phase")
+    phase = st.selectbox(
+        "Select experimental phase",
+        options=["V1", "V2", "V3", "V4", "V5", "V6"],
+        index=5,
+        help="V1: Basic RAG | V2: +Query Rewriter | V3: +History | V4: +Hybrid | V5: +Reranker | V6: +Guardrails",
+    )
+
     # ==================== CACHE STATUS ====================
     st.divider()
     st.subheader("⚡ Cache Status")
@@ -332,6 +342,7 @@ if question:
                 "top_k": top_k,  # Use the slider value
                 "use_reranker": use_reranker,  # Send the checkbox value
                 "use_hybrid": use_hybrid,  # Send hybrid search setting
+                "phase": phase,  # Send the selected ablation phase
                 "history": [
                     {"role": m["role"], "content": m["content"]}
                     for m in st.session_state.chat_history
