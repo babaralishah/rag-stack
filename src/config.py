@@ -41,7 +41,8 @@ RERANKER_FUSION_ALPHA = 0.65  # 0.65 reranker + 0.35 embedding
 
 # Ablation study phase toggles
 PHASE_FLAGS = {
-    "V1": {
+    "V1": {  # Absolute Baseline Floor
+        # "embedding_model": "all-MiniLM-L6-v2 (384d)",
         "use_query_rewriter": False,
         "use_hybrid": False,
         "use_chat_history": False,
@@ -51,8 +52,9 @@ PHASE_FLAGS = {
         "use_cot": False,
         "use_few_shot": False,
     },
-    "V2": {
-        "use_query_rewriter": True,
+    "V2": {  # Isolate Algorithmic Optimization: Query Rewriting
+        # "embedding_model": "all-MiniLM-L6-v2 (384d)",
+        "use_query_rewriter": True, 
         "use_hybrid": False,
         "use_chat_history": False,
         "use_reranker": False,
@@ -61,9 +63,32 @@ PHASE_FLAGS = {
         "use_cot": False,
         "use_few_shot": False,
     },
-    "V3": {
+    "V3": {  # Isolate Representation Capacity: Vector Density Upgrade
+        # "embedding_model": "bge-large-en-v1.5 (1024d)",
+        "use_query_rewriter": True,                      # No other flags change
+        "use_hybrid": False,
+        "use_chat_history": False, 
+        "use_reranker": False,
+        "use_guardrails": False,
+        "use_cache": False,
+        "use_cot": False,
+        "use_few_shot": False,
+    },
+    "V4": {  # Isolate Context Awareness: Window Memory
+        # "embedding_model": "bge-large-en-v1.5 (1024d)",
         "use_query_rewriter": True,
         "use_hybrid": False,
+        "use_chat_history": True,                        # Swapped here!
+        "use_reranker": False,
+        "use_guardrails": False,
+        "use_cache": False,
+        "use_cot": False,
+        "use_few_shot": False,
+    },
+    "V5": {  # Isolate Retrieval Multi-Modality: BM25 + RRF
+        # "embedding_model": "bge-large-en-v1.5 (1024d)",
+        "use_query_rewriter": True,
+        "use_hybrid": True,                              # Swapped here!
         "use_chat_history": True,
         "use_reranker": False,
         "use_guardrails": False,
@@ -71,27 +96,19 @@ PHASE_FLAGS = {
         "use_cot": False,
         "use_few_shot": False,
     },
-    "V4": {
+    "V6": {  # Isolate Document Re-scoring: Cross-Encoder Reranking
+        # "embedding_model": "bge-large-en-v1.5 (1024d)",
         "use_query_rewriter": True,
         "use_hybrid": True,
         "use_chat_history": True,
-        "use_reranker": False,
+        "use_reranker": True,                            # Swapped here!
         "use_guardrails": False,
         "use_cache": False,
         "use_cot": False,
         "use_few_shot": False,
     },
-    "V5": {
-        "use_query_rewriter": True,
-        "use_hybrid": True,
-        "use_chat_history": True,
-        "use_reranker": True,
-        "use_guardrails": False,
-        "use_cache": False,
-        "use_cot": False,
-        "use_few_shot": False,
-    },
-    "V6": {
+    "V7": {  # Maximum Production Optimization Engine
+        # "embedding_model": "bge-large-en-v1.5 (1024d)",
         "use_query_rewriter": True,
         "use_hybrid": True,
         "use_chat_history": True,
