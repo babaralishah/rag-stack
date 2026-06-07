@@ -1,6 +1,8 @@
 import re
 from typing import Any, Dict, List, Optional
 
+from src.config import MIN_SCORE
+
 
 def normalize_text(text: str) -> str:
     return re.sub(r"\s+", " ", text.lower()).strip()
@@ -77,9 +79,9 @@ def compute_ragas_metrics(
         label = "low"
 
     warnings: List[str] = []
-    if mean_source_score < 0.35:
+    if mean_source_score < MIN_SCORE:
         warnings.append("low_retrieval_confidence")
-    if source_support < 0.35:
+    if source_support < MIN_SCORE:
         warnings.append("low_source_support")
     if label == "low" and warnings == []:
         warnings.append("review_answer_quality")

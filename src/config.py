@@ -17,7 +17,7 @@ EMBED_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
 OLLAMA_MODEL = "llama3.2:3b"
 
 TOP_K = 3
-MIN_SCORE = 0.35
+MIN_SCORE = 0.5
 MAX_CHARS = 1500
 
 CHUNK_OVERLAP = 120
@@ -37,7 +37,7 @@ RERANKER_MODEL = "BAAI/bge-reranker-base"
 RERANKER_TOP_K = 12  # How many chunks to retrieve initially
 RERANKER_KEEP_TOP_K = 6  # How many best chunks to keep after reranking
 USE_RERANKER = True  # Easy toggle
-RERANKER_FUSION_ALPHA = 0.65  # 0.65 reranker + 0.35 embedding
+RERANKER_FUSION_ALPHA = 0.65  # 0.65 reranker + 0.5 embedding
 
 # Ablation study phase toggles
 PHASE_FLAGS = {

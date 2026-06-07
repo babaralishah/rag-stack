@@ -4,7 +4,7 @@ from pathlib import Path
 from src.document_loader import load_pdf
 from src.chunker import chunk_text
 from src.embedder import HFEmbedder
-from src.config import OLLAMA_MODEL, TOP_K
+from src.config import MIN_SCORE, OLLAMA_MODEL, TOP_K
 from src.vector_store import FaissVectorStore
 from src.rag_pipeline import rag_answer
 
@@ -51,7 +51,7 @@ def main():
         out = rag_answer(
             question=q,
             retrieved=retrieved,
-            min_score=0.35,
+            min_score=MIN_SCORE,
             model=OLLAMA_MODEL,
         )
 

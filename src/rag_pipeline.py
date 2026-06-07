@@ -1,6 +1,6 @@
 import logging
 from typing import List, Dict, Any, Optional
-from src.config import MAX_CHARS, RERANKER_FUSION_ALPHA, CHAT_HISTORY_TURNS
+from src.config import MAX_CHARS, MIN_SCORE, RERANKER_FUSION_ALPHA, CHAT_HISTORY_TURNS
 from src.hosted_llm import generate_answer
 from src.reranker import get_reranker
 
@@ -61,7 +61,7 @@ def build_history_section(
 def rag_answer(
     question: str,
     retrieved: List[Dict[str, Any]],
-    min_score: float = 0.35,
+    min_score = MIN_SCORE,
     use_reranker: bool = True,
     final_top_k: int = 5,
     use_guardrails: bool = False,
