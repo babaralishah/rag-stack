@@ -257,12 +257,12 @@ with st.sidebar:
     with col_r1:
         use_reranker = st.checkbox(
             "Enable Re-ranking",
-            value=True,
+            value=False,
             help="Improves relevance using CrossEncoder",
         )
     with col_r2:
         use_hybrid = st.checkbox(
-            "Enable Hybrid Search", value=True, help="Semantic + Keyword (BM25)"
+            "Enable Hybrid Search", value=False, help="Semantic + Keyword (BM25)"
         )
 
     rewriting_strategy = st.radio(
