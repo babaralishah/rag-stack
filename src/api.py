@@ -528,6 +528,12 @@ def rewrite_and_embed_query(
     rewriting_strategy: str = "hyde",
 ) -> tuple[str, Any]:
     """Rewrite the user question (optionally using recent history) and embed it for retrieval."""
+    
+    logger.info("============== PIPELINE ENTRY ==============")
+    logger.info(f"📥 Input Question: '{question}'")
+    logger.info(f"📥 Strategy Selected: '{rewriting_strategy}' (Rewriter Enabled: {use_query_rewriter})")
+    logger.info(f"📥 History Chunks Received: {history}")
+    
     if not use_query_rewriter or rewriting_strategy == "none":
         return question, get_embedder().embed_query(question)
 
@@ -630,7 +636,7 @@ def query(req: QueryRequest):
         query_text, query_vector = rewrite_and_embed_query(
             question,
             use_query_rewriter=flags.get("use_query_rewriter", True),
-            history=history if flags.get("use_chat_history") else None,
+            history=history if history else None,  # <-- FIXED: Use history if it exists, regardless of the flag!
             rewriting_strategy=rewriting_strategy,
         )
         retrieved = search_documents(
