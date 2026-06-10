@@ -265,10 +265,21 @@ with st.sidebar:
             "Enable Hybrid Search", value=True, help="Semantic + Keyword (BM25)"
         )
 
+    rewriting_strategy = st.radio(
+        "Query Rewriting Strategy",
+        options=["none", "keyword_expansion", "hyde"],
+        index=2,
+        help="Use none for raw question retrieval, keyword_expansion for query-term boosting, or hyde for Hypothetical Document Embeddings.",
+    )
+
     # Number of retrieved chunks to request from the backend. This value
     # is sent as `top_k` in the query payload and controls final result size.
     top_k = st.slider(
-        "Number of chunks to retrieve", min_value=3, max_value=15, value=6, step=1
+        "Number of chunks to retrieve",
+        min_value=5,
+        max_value=15,
+        value=6,
+        step=1,
     )
 
     # ==================== ABLATION STUDY PHASES ====================
@@ -342,6 +353,7 @@ if question:
                 "top_k": top_k,  # Use the slider value
                 "use_reranker": use_reranker,  # Send the checkbox value
                 "use_hybrid": use_hybrid,  # Send hybrid search setting
+                "rewriting_strategy": rewriting_strategy,
                 "phase": phase,  # Send the selected ablation phase
                 "history": [
                     {"role": m["role"], "content": m["content"]}
@@ -401,6 +413,18 @@ for message in st.session_state.chat_history:
                         f"{evaluation.get('source_confidence', 0) * 100:.1f}%",
                         help="Average final source relevance score from the retrieved citations.",
                     )
+                    st.metric(
+                        "Retrieved Sources",
+                        evaluation.get('source_count', 0),
+                        help="Number of document chunks used in the answer.",
+                    )
+                    if evaluation.get("reference_scores"):
+                        ref_scores = evaluation["reference_scores"]
+                        st.markdown(
+                            f"**Reference Precision:** {ref_scores.get('precision', 0):.2f}  \n"
+                            f"**Reference Recall:** {ref_scores.get('recall', 0):.2f}  \n"
+                            f"**Reference F1:** {ref_scores.get('f1', 0):.2f}"
+                        )
                     st.markdown(
                         f"**Label:** {evaluation.get('label', 'unknown').title()}  \\"
                         f"**Warnings:** {', '.join(evaluation.get('warnings', [])) or 'none'}"

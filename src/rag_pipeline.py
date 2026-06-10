@@ -174,7 +174,7 @@ def rag_answer(
 
     # Prepare sources
     sources = []
-    for r in retrieved[:3]:
+    for r in retrieved:
         file = r["metadata"].get("source_file", "unknown")
         page = r["metadata"].get("page", "?")
         sources.append(
