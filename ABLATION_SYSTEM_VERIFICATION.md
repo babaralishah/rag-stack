@@ -222,7 +222,7 @@ else:
 ```python
 if use_guardrails and retrieved:
     max_score = max((r.get("score", 0.0) for r in retrieved), default=0.0)
-    if max_score < min_score:  # min_score = 0.35
+    if max_score < min_score:  # min_score = 0.5
         logger.warning("Guardrail triggered: max retrieved score %.3f...", max_score, min_score)
         return {
             "answer": "I don't have enough high-confidence information from the documents...",
@@ -291,7 +291,7 @@ All verified in `tests/test_phase_flags.py`:
 ✅ **Test 2**: resolve_phase_flags() returns correct dictionaries for each phase
 ✅ **Test 3**: get_query_settings() properly resolves phases
 ✅ **Test 4**: Cache keys differ per phase (prevents cross-phase hits)
-✅ **Test 5**: Guardrail abstention triggers at score 0.2 (< 0.35 threshold) when enabled
+✅ **Test 5**: Guardrail abstention triggers at score 0.2 (< 0.5 threshold) when enabled
 ✅ **Test 6**: Normal LLM flow occurs at score 0.95 even when guardrails enabled
 ✅ **Test 7**: Guardrails don't trigger in V5 (guardrails disabled)
 
@@ -345,7 +345,7 @@ All verified in `tests/test_phase_flags.py`:
     │ If use_reranker:                 │
     │   Cross-encode score candidates  │
     │ If use_guardrails:               │
-    │   Check max_score >= 0.35        │
+    │   Check max_score >= 0.5        │
     │   If not → abstain               │
     │                                  │
     │ Generate answer + evaluate       │

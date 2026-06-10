@@ -65,6 +65,8 @@ Rewritten Question:"""
             logger.info(f"Query rewrite too weak, using original: {original_question}")
             return original_question
 
+        logger.info(f"🔄 History of chat conversation:  '{history_block}'")
+        
         logger.info(f"🔄 QUERY REWRITTEN: '{original_question}' → '{rewritten}'")
         return rewritten
 

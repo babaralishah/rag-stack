@@ -47,8 +47,8 @@ The system also produces:
   - `medium` if score >= 0.45
   - `low` otherwise
 - `warnings`: a small list of caution signals
-  - `low_retrieval_confidence` if mean source score is below 0.35
-  - `low_source_support` if source support is below 0.35
+  - `low_retrieval_confidence` if mean source score is below 0.5
+  - `low_source_support` if source support is below 0.5
   - `review_answer_quality` if the score is low but no other warning was added
 
 ## Reference evaluation
