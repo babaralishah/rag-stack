@@ -113,6 +113,7 @@ Return only the hypothetical document excerpt:"""
 
         logger.info(f"🔄 QUERY REWRITE STRATEGY: {strategy}")
         logger.info(f"🔄 QUERY REWRITTEN: '{original_question}' → '{rewritten}'")
+        logger.info(f"🔄 History of chat conversation:  '{history_block}'")
         return rewritten
     except Exception as e:
         logger.warning(f"Query rewriting failed: {e}")
