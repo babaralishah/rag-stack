@@ -288,7 +288,7 @@ with st.sidebar:
     phase = st.selectbox(
         "Select experimental phase",
         options=["V1", "V2", "V3", "V4", "V5", "V6"],
-        index=0,
+        index=2,
         help="V1: Basic RAG | V2: +Query Rewriter | V3: +History | V4: +Hybrid | V5: +Reranker | V6: +Guardrails",
     )
 
