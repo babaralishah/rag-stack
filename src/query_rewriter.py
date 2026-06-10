@@ -22,6 +22,7 @@ def _clean_rewritten_text(text: str) -> str:
 def rewrite_query(original_question: str, history: list | None = None, strategy: str = "hyde") -> str:
     """Rewrite the user's question for retrieval using the chosen strategy."""
     normalized = original_question.strip()
+    logger.info(f"🔄 DEBUG RAW HISTORY RECEIVED: {history}")
     if not normalized:
         return original_question
 
@@ -84,6 +85,11 @@ Return only the hypothetical document excerpt:"""
             max_tokens=max_tokens,
         )
 
+        if "llm error" in rewritten.lower() or "error" in rewritten.lower():
+            logger.warning("LLM API returned an error string. Falling back to original query.")
+            return original_question
+            
+        
         rewritten = _clean_rewritten_text(rewritten)
         if strategy == "keyword_expansion":
             rewritten = re.sub(r"[\n,]+", " ", rewritten)
