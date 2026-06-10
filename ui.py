@@ -268,7 +268,7 @@ with st.sidebar:
     rewriting_strategy = st.radio(
         "Query Rewriting Strategy",
         options=["none", "keyword_expansion", "hyde"],
-        index=2,
+        index=0,
         help="Use none for raw question retrieval, keyword_expansion for query-term boosting, or hyde for Hypothetical Document Embeddings.",
     )
 
