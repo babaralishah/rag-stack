@@ -52,6 +52,31 @@ def compute_reference_scores(answer: str, reference: str) -> Dict[str, float]:
     return {"precision": precision, "recall": recall, "f1": f1}
 
 
+def compute_retrieval_hit_rate(
+    retrieved: List[Dict[str, Any]],
+    relevant_ids: List[str],
+    id_field: str = "source_file",
+) -> float:
+    """Compute retrieval hit rate for a list of expected document identifiers."""
+    if not relevant_ids:
+        return 0.0
+
+    retrieved_ids = {
+        str(item.get("metadata", {}).get(id_field, "")).strip().lower()
+        for item in retrieved
+        if item.get("metadata")
+    }
+    if not retrieved_ids:
+        return 0.0
+
+    hits = sum(
+        1
+        for ref in relevant_ids
+        if str(ref).strip().lower() in retrieved_ids
+    )
+    return float(hits) / len(relevant_ids)
+
+
 def compute_ragas_metrics(
     answer: str,
     sources: List[Dict[str, Any]],

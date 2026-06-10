@@ -7,7 +7,7 @@ and clearing caches.
 
 import logging
 from pathlib import Path
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Literal
 from datetime import datetime
 import hashlib
 import json
@@ -177,6 +177,7 @@ class QueryRequest(BaseModel):
     top_k: int = TOP_K
     use_reranker: bool = True
     use_hybrid: bool = True
+    rewriting_strategy: Literal["none", "keyword_expansion", "hyde"] = "hyde"
     phase: Optional[str] = None
     history: Optional[List[ChatMessage]] = None
 
@@ -520,14 +521,19 @@ def load_search_store() -> FaissVectorStore | None:
     return load_or_create_store(dim=EMBED_DIM)
 
 
-def rewrite_and_embed_query(question: str, use_query_rewriter: bool = True, history: list | None = None) -> tuple[str, Any]:
+def rewrite_and_embed_query(
+    question: str,
+    use_query_rewriter: bool = True,
+    history: list | None = None,
+    rewriting_strategy: str = "hyde",
+) -> tuple[str, Any]:
     """Rewrite the user question (optionally using recent history) and embed it for retrieval."""
-    if not use_query_rewriter:
+    if not use_query_rewriter or rewriting_strategy == "none":
         return question, get_embedder().embed_query(question)
 
     from src.query_rewriter import rewrite_query
 
-    rewritten = rewrite_query(question, history=history)
+    rewritten = rewrite_query(question, history=history, strategy=rewriting_strategy)
     query_vector = get_embedder().embed_query(rewritten)
     return rewritten, query_vector
 
@@ -595,6 +601,10 @@ def query(req: QueryRequest):
 
     # Only compute and consult cache when the active phase enables it
     cached_response = None
+    rewriting_strategy = (
+        req.rewriting_strategy if flags.get("use_query_rewriter", True) else "none"
+    )
+
     if flags.get("use_cache"):
         cache_key = get_cache_key(
             question=question,
@@ -602,6 +612,7 @@ def query(req: QueryRequest):
             use_reranker=flags.get("use_reranker", req.use_reranker),
             top_k=req.top_k,
             phase=req.phase,
+            rewriting_strategy=rewriting_strategy,
         )
         cached_response = get_cached_query_response(cache_key)
         if cached_response is not None:
@@ -620,6 +631,7 @@ def query(req: QueryRequest):
             question,
             use_query_rewriter=flags.get("use_query_rewriter", True),
             history=history if flags.get("use_chat_history") else None,
+            rewriting_strategy=rewriting_strategy,
         )
         retrieved = search_documents(
             store,
