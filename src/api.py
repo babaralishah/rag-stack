@@ -540,6 +540,8 @@ def rewrite_and_embed_query(
     from src.query_rewriter import rewrite_query
 
     rewritten = rewrite_query(question, history=history, strategy=rewriting_strategy)
+    logger.info(f"📤 Final Search String returning from pipeline: '{rewritten}'")
+    logger.info("=============================================")
     query_vector = get_embedder().embed_query(rewritten)
     return rewritten, query_vector
 
@@ -604,6 +606,13 @@ def query(req: QueryRequest):
 
     # Normalize history only if enabled by phase flags
     history = normalize_chat_history(req.history) if flags.get("use_chat_history") else []
+    
+      # --- ADD LOGGER HERE ---
+    logger.info("📱 --- NEW API INBOUND REQUEST ---")
+    logger.info(f"Raw req.question: {req.question}")
+    logger.info(f"Normalized History Length: {len(history)} items")
+    logger.info(f"Resolved Settings Flags: {flags}")
+    logger.info("----------------------------------")
 
     # Only compute and consult cache when the active phase enables it
     cached_response = None
