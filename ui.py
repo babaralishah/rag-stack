@@ -368,14 +368,20 @@ if question:
             answer = data.get("answer", "Sorry, I couldn't generate an answer.")
             sources = data.get("sources", [])
             evaluation = data.get("evaluation", {})
+            standard_metrics = data.get("standard_metrics", {})
+            rag_metrics = data.get("rag_metrics", {})
+            system_config = data.get("system_config", {})
 
-            # Add assistant message
+            # Add assistant message with all metrics and configuration
             st.session_state.chat_history.append(
                 {
                     "role": "assistant",
                     "content": answer,
                     "sources": sources,
                     "evaluation": evaluation,
+                    "standard_metrics": standard_metrics,
+                    "rag_metrics": rag_metrics,
+                    "system_config": system_config,
                 }
             )
 
@@ -397,7 +403,7 @@ for message in st.session_state.chat_history:
 
             evaluation = message.get("evaluation") or {}
             if evaluation:
-                with st.expander("📊 Answer Quality", expanded=False):
+                with st.expander("📊 Answer Quality (RAGAS)", expanded=False):
                     st.metric(
                         "RAGAS Score",
                         f"{evaluation.get('ragas_score', 0) * 100:.1f}%",
@@ -429,6 +435,123 @@ for message in st.session_state.chat_history:
                         f"**Label:** {evaluation.get('label', 'unknown').title()}  \\"
                         f"**Warnings:** {', '.join(evaluation.get('warnings', [])) or 'none'}"
                     )
+
+            # === Standard Evaluation Metrics ===
+            standard_metrics = message.get("standard_metrics") or {}
+            if standard_metrics and any(v is not None for v in standard_metrics.values()):
+                with st.expander("📈 Standard Evaluation Metrics", expanded=False):
+                    col1, col2, col3 = st.columns(3)
+                    
+                    with col1:
+                        if standard_metrics.get("recall_at_k") is not None:
+                            st.metric(
+                                "Recall@k",
+                                f"{standard_metrics['recall_at_k']:.3f}",
+                                help="Proportion of relevant docs in top-k retrieved docs"
+                            )
+                        if standard_metrics.get("mrr") is not None:
+                            st.metric(
+                                "MRR",
+                                f"{standard_metrics['mrr']:.3f}",
+                                help="Mean Reciprocal Rank - reciprocal of rank of first relevant doc"
+                            )
+                    
+                    with col2:
+                        if standard_metrics.get("ndcg_at_k") is not None:
+                            st.metric(
+                                "nDCG@k",
+                                f"{standard_metrics['ndcg_at_k']:.3f}",
+                                help="Normalized Discounted Cumulative Gain"
+                            )
+                        if standard_metrics.get("hit_rate") is not None:
+                            st.metric(
+                                "Hit Rate",
+                                f"{standard_metrics['hit_rate']:.3f}",
+                                help="1 if any relevant doc in top-k, 0 otherwise"
+                            )
+                    
+                    with col3:
+                        if standard_metrics.get("exact_match") is not None:
+                            st.metric(
+                                "Exact Match",
+                                f"{standard_metrics['exact_match']:.3f}",
+                                help="Whether answer exactly matches reference (if available)"
+                            )
+                        if standard_metrics.get("f1_score") is not None:
+                            st.metric(
+                                "F1 Score",
+                                f"{standard_metrics['f1_score']:.3f}",
+                                help="Token-level F1 score between answer and reference"
+                            )
+
+            # === RAG-Specific Quality Metrics ===
+            rag_metrics = message.get("rag_metrics") or {}
+            if rag_metrics and any(v is not None for v in rag_metrics.values()):
+                with st.expander("🎯 RAG-Specific Quality Metrics", expanded=False):
+                    col1, col2, col3 = st.columns(3)
+                    
+                    with col1:
+                        if rag_metrics.get("faithfulness") is not None:
+                            st.metric(
+                                "Faithfulness",
+                                f"{rag_metrics['faithfulness']:.3f}",
+                                help="Degree to which answer is supported by retrieved context (0-1)"
+                            )
+                    
+                    with col2:
+                        if rag_metrics.get("answer_relevance") is not None:
+                            st.metric(
+                                "Answer Relevance",
+                                f"{rag_metrics['answer_relevance']:.3f}",
+                                help="Degree to which answer addresses the question (0-1)"
+                            )
+                    
+                    with col3:
+                        if rag_metrics.get("context_precision") is not None:
+                            st.metric(
+                                "Context Precision",
+                                f"{rag_metrics['context_precision']:.3f}",
+                                help="Proportion of retrieved contexts that support the answer (0-1)"
+                            )
+
+            # === System Configuration ===
+            system_config = message.get("system_config") or {}
+            if system_config:
+                with st.expander("⚙️ System Configuration", expanded=False):
+                    col1, col2 = st.columns(2)
+                    
+                    with col1:
+                        st.subheader("Hardware & Models")
+                        if system_config.get("hardware_info"):
+                            st.write(f"**Hardware:** {system_config['hardware_info']}")
+                        if system_config.get("embedding_model"):
+                            st.write(f"**Embedding Model:** `{system_config['embedding_model']}`")
+                        if system_config.get("llm_model"):
+                            st.write(f"**LLM Model:** `{system_config['llm_model']}`")
+                    
+                    with col2:
+                        st.subheader("Retrieval Settings")
+                        if system_config.get("chunk_size") is not None:
+                            st.write(f"**Chunk Size:** {system_config['chunk_size']} tokens")
+                        if system_config.get("chunk_overlap") is not None:
+                            st.write(f"**Chunk Overlap:** {system_config['chunk_overlap']} tokens")
+                        if system_config.get("top_k") is not None:
+                            st.write(f"**Top-k:** {system_config['top_k']}")
+                    
+                    col3, col4 = st.columns(2)
+                    
+                    with col3:
+                        st.subheader("Embedding Config")
+                        if system_config.get("embedding_dimensions") is not None:
+                            st.write(f"**Dimensions:** {system_config['embedding_dimensions']}d")
+                        if system_config.get("temperature") is not None:
+                            st.write(f"**LLM Temperature:** {system_config['temperature']}")
+                    
+                    with col4:
+                        st.subheader("Timestamp")
+                        if system_config.get("timestamp"):
+                            st.write(f"**Query Time:** {system_config['timestamp']}")
+
 
             # Sources Section
             if message.get("sources"):

@@ -34,6 +34,7 @@ from src.config import (
     CHUNK_OVERLAP,
     CHAT_HISTORY_TURNS,
     PHASE_FLAGS,
+    OLLAMA_MODEL,
 )
 from src.utils import file_sha256
 from src.document_loader import load_pdf
@@ -42,6 +43,7 @@ from src.embedder import HFEmbedder
 from src.vector_store import FaissVectorStore
 from src.rag_pipeline import rag_answer
 from src.evaluator import compute_ragas_metrics
+from src.advanced_metrics import compute_comprehensive_metrics
 from src.source_loader import (
     fetch_web_text,
     fetch_youtube_transcript,
@@ -219,10 +221,43 @@ class EvaluationMetrics(BaseModel):
     reference_scores: Optional[Dict[str, float]] = None
 
 
+class StandardMetrics(BaseModel):
+    """Standard retrieval and answer quality metrics"""
+    recall_at_k: Optional[float] = None
+    mrr: Optional[float] = None
+    ndcg_at_k: Optional[float] = None
+    hit_rate: Optional[float] = None
+    exact_match: Optional[float] = None
+    f1_score: Optional[float] = None
+
+
+class RAGMetrics(BaseModel):
+    """RAG-specific quality metrics"""
+    faithfulness: float
+    answer_relevance: float
+    context_precision: float
+
+
+class SystemConfiguration(BaseModel):
+    """System configuration and parameters used for the query"""
+    hardware_info: Optional[str] = None
+    embedding_model: str
+    llm_model: str
+    chunk_size: int
+    chunk_overlap: int
+    top_k: int
+    embedding_dimensions: int
+    temperature: float
+    timestamp: str
+
+
 class QueryResponse(BaseModel):
     answer: str
     sources: List[Dict[str, Any]]
     evaluation: Optional[EvaluationMetrics] = None
+    standard_metrics: Optional[StandardMetrics] = None
+    rag_metrics: Optional[RAGMetrics] = None
+    system_config: Optional[SystemConfiguration] = None
 
 
 def normalize_chat_history(history: Optional[List[ChatMessage]]) -> List[Dict[str, str]]:
@@ -571,7 +606,7 @@ def generate_answer_payload(
     flags: Dict[str, bool],
     history: Optional[List[Dict[str, str]]] = None,
 ) -> Dict[str, Any]:
-    """Generate the final answer payload from retrieval and reranking."""
+    """Generate the final answer payload from retrieval and reranking with comprehensive metrics."""
     out = rag_answer(
         question=question,
         retrieved=retrieved,
@@ -584,15 +619,81 @@ def generate_answer_payload(
         history=history,
     )
 
+    answer = out["answer"]
+    sources = out.get("sources", [])
+    
+    # === Compute traditional RAGAS metrics ===
     evaluation = compute_ragas_metrics(
-        answer=out["answer"],
-        sources=out.get("sources", []),
+        answer=answer,
+        sources=sources,
     )
+    
+    # === Compute comprehensive standard and RAG metrics ===
+    try:
+        comprehensive_metrics = compute_comprehensive_metrics(
+            question=question,
+            answer=answer,
+            retrieved=retrieved,
+            sources=sources,
+            reference=None,
+            relevant_document_ids=None,
+            top_k=req.top_k,
+        )
+        
+        standard_metrics = StandardMetrics(
+            recall_at_k=comprehensive_metrics.get("recall_at_k"),
+            mrr=comprehensive_metrics.get("mrr"),
+            ndcg_at_k=comprehensive_metrics.get("ndcg_at_k"),
+            hit_rate=comprehensive_metrics.get("hit_rate"),
+            exact_match=comprehensive_metrics.get("exact_match"),
+            f1_score=comprehensive_metrics.get("f1_score"),
+        )
+        
+        rag_metrics = RAGMetrics(
+            faithfulness=comprehensive_metrics.get("faithfulness", 0.0),
+            answer_relevance=comprehensive_metrics.get("answer_relevance", 0.0),
+            context_precision=comprehensive_metrics.get("context_precision", 0.0),
+        )
+    except Exception as e:
+        logger.warning(f"Failed to compute comprehensive metrics: {e}")
+        standard_metrics = None
+        rag_metrics = None
+    
+    # === Capture system configuration ===
+    try:
+        import platform
+        import psutil
+        
+        # Get hardware info
+        try:
+            cpu_count = psutil.cpu_count(logical=True)
+            ram_gb = psutil.virtual_memory().total / (1024 ** 3)
+            hardware_info = f"{cpu_count}x CPU, {ram_gb:.1f}GB RAM ({platform.system()})"
+        except Exception:
+            hardware_info = platform.system()
+        
+        system_config = SystemConfiguration(
+            hardware_info=hardware_info,
+            embedding_model=EMBED_MODEL,
+            llm_model=OLLAMA_MODEL,
+            chunk_size=CHUNK_SIZE,
+            chunk_overlap=CHUNK_OVERLAP,
+            top_k=req.top_k,
+            embedding_dimensions=EMBED_DIM,
+            temperature=0.3,  # Default temperature used by LLM
+            timestamp=datetime.utcnow().isoformat() + "Z",
+        )
+    except Exception as e:
+        logger.warning(f"Failed to capture system configuration: {e}")
+        system_config = None
 
     return {
-        "answer": out["answer"],
-        "sources": out.get("sources", []),
+        "answer": answer,
+        "sources": sources,
         "evaluation": evaluation,
+        "standard_metrics": standard_metrics,
+        "rag_metrics": rag_metrics,
+        "system_config": system_config,
     }
 
 
