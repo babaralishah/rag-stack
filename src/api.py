@@ -158,6 +158,12 @@ def ingest_pages(
         m["source_file"] = source_file
         m["source_type"] = source_type
         m["uploaded_at"] = datetime.utcnow().isoformat() + "Z"
+        # Standardized document identifier used by metrics and downstream code
+        page = m.get("page")
+        if page is not None and str(page).strip() != "":
+            m["doc_id"] = f"{source_hash}:p{page}"
+        else:
+            m["doc_id"] = f"{source_hash}"
         metas.append(m)
 
     emb = get_embedder().embed_texts(texts)
@@ -367,6 +373,12 @@ def ingest_upload_pages(
         m["source_file"] = filename
         m["source_type"] = "pdf" if file_ext == ".pdf" else m.get("source_type", "text")
         m["uploaded_at"] = datetime.utcnow().isoformat() + "Z"
+        # Standardized document identifier for uploaded chunks
+        page = m.get("page")
+        if page is not None and str(page).strip() != "":
+            m["doc_id"] = f"{file_hash}:p{page}"
+        else:
+            m["doc_id"] = f"{file_hash}"
         metas.append(m)
 
     emb = get_embedder().embed_texts(texts)
@@ -621,6 +633,16 @@ def generate_answer_payload(
 
     answer = out["answer"]
     sources = out.get("sources", [])
+    # === Extract retrieved document IDs from the raw retrieved results ===
+    retrieved_ids = []
+    try:
+        for doc in retrieved:
+            meta = doc.get("metadata") or {}
+            doc_id = meta.get("doc_id") or meta.get("source_file") or meta.get("file") or doc.get("id")
+            if doc_id:
+                retrieved_ids.append(str(doc_id))
+    except Exception:
+        retrieved_ids = []
     
     # === Compute traditional RAGAS metrics ===
     evaluation = compute_ragas_metrics(
@@ -636,7 +658,7 @@ def generate_answer_payload(
             retrieved=retrieved,
             sources=sources,
             reference=None,
-            relevant_document_ids=None,
+            relevant_document_ids=retrieved_ids if retrieved_ids else None,
             top_k=req.top_k,
         )
         
