@@ -56,6 +56,7 @@ def rewrite_query(original_question: str, history: list | None = None, strategy:
         if history_lines:
             history_block = "Conversation history:\n" + "\n".join(history_lines) + "\n\n"
 
+# Keyword expansion strategy prompts the LLM to generate a list of relevant keywords and concepts, while the HyDE strategy prompts it to generate a hypothetical document excerpt that could answer the question. Both strategies include the recent conversation history to provide context for the rewrite. The function also includes various checks to ensure that the rewritten query is valid and useful, falling back to the original question if necessary.
     if strategy == "keyword_expansion":
         prompt = f"""You are an expert retrieval query optimizer.
 
@@ -66,6 +67,8 @@ Do not add any explanation, headers, or labels.
 
 Return only the keyword list:"""
         max_tokens = 80
+
+# The HyDE (Hypothetical Document Excerpt) strategy prompts the LLM to generate a concise, authoritative-sounding excerpt that could plausibly be found in a technical document answering the user's question. This can help guide the retrieval system to find documents that contain similar language and concepts, even if they don't match the original question verbatim.
     else:
         prompt = f"""You are an expert technical writer and retrieval assistant.
 
