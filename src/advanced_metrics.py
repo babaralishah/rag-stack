@@ -111,18 +111,20 @@ def compute_ndcg(
     top_k_retrieved = retrieved[:k]
     relevant_ids_set = {str(rid).strip().lower() for rid in relevant_ids}
     
-    # Compute DCG
+    # Compute DCG using log2 discount
+    import math
+
     dcg = 0.0
     for i, item in enumerate(top_k_retrieved, 1):
         doc_id = str(item.get("metadata", {}).get(id_field, "")).strip().lower()
         relevance = 1 if doc_id in relevant_ids_set else 0
-        dcg += relevance / (2 ** (i - 1) / 2)  # log2(i+1) = log2(i) + 1
-    
-    # Compute IDCG (ideal DCG: all relevant docs at top, then non-relevant)
+        dcg += relevance / math.log2(i + 1)
+
+    # Compute IDCG (ideal DCG: all relevant docs at top)
     num_relevant = min(len(relevant_ids), k)
     idcg = 0.0
     for i in range(1, num_relevant + 1):
-        idcg += 1.0 / (2 ** (i - 1) / 2)
+        idcg += 1.0 / math.log2(i + 1)
     
     if idcg == 0.0:
         return 0.0
@@ -402,45 +404,51 @@ def compute_comprehensive_metrics(
     metrics = {}
     
     # === Retrieval Metrics ===
+    # Determine the set of relevant document IDs to evaluate retrieval.
     if relevant_document_ids:
+        eval_ids = [str(r).strip() for r in relevant_document_ids if r]
+    else:
+        # Try to extract identifiers from the `sources` returned by the pipeline.
+        eval_ids = []
+        for src in sources:
+            # Common places where a source id may live
+            mid = src.get("metadata") or {}
+            candidates = [
+                mid.get("source_file"),
+                mid.get("file"),
+                src.get("file"),
+                src.get("source_file"),
+                src.get("id"),
+            ]
+            for c in candidates:
+                if c:
+                    eval_ids.append(str(c).strip())
+        # Deduplicate and normalize
+        eval_ids = list({i.lower(): i for i in eval_ids}.values())
+
+    if eval_ids:
         metrics["recall_at_k"] = round(
-            compute_recall_at_k(retrieved, relevant_document_ids, k=top_k),
-            4
+            compute_recall_at_k(retrieved, eval_ids, k=top_k),
+            4,
         )
         metrics["mrr"] = round(
-            compute_mrr(retrieved, relevant_document_ids),
-            4
+            compute_mrr(retrieved, eval_ids),
+            4,
         )
         metrics["ndcg_at_k"] = round(
-            compute_ndcg(retrieved, relevant_document_ids, k=top_k),
-            4
+            compute_ndcg(retrieved, eval_ids, k=top_k),
+            4,
         )
         metrics["hit_rate"] = round(
-            compute_hit_rate(retrieved, relevant_document_ids, k=top_k),
-            4
+            compute_hit_rate(retrieved, eval_ids, k=top_k),
+            4,
         )
     else:
-        # If no reference IDs provided, use all sources as pseudo-relevant
-        source_ids = [src.get("metadata", {}).get("source_file", "") for src in sources]
-        source_ids = [s for s in source_ids if s]
-        
-        if source_ids:
-            metrics["recall_at_k"] = round(
-                compute_recall_at_k(sources, source_ids, k=len(sources)),
-                4
-            )
-            metrics["mrr"] = round(
-                compute_mrr(sources, source_ids),
-                4
-            )
-            metrics["ndcg_at_k"] = round(
-                compute_ndcg(sources, source_ids, k=len(sources)),
-                4
-            )
-            metrics["hit_rate"] = round(
-                compute_hit_rate(sources, source_ids, k=len(sources)),
-                4
-            )
+        # No identifiable relevant IDs available; leave retrieval metrics as None
+        metrics["recall_at_k"] = None
+        metrics["mrr"] = None
+        metrics["ndcg_at_k"] = None
+        metrics["hit_rate"] = None
     
     # === Answer Quality Metrics (if reference provided) ===
     if reference:
