@@ -4,6 +4,14 @@ import streamlit as st
 import requests
 from typing import Dict, Any
 
+from src.api import (
+    QueryRequest,
+    get_query_settings,
+    load_search_store,
+    rewrite_and_embed_query,
+    search_documents,
+)
+
 
 def format_api_error(exc: Exception) -> str:
     if isinstance(exc, requests.exceptions.HTTPError) and exc.response is not None:
@@ -24,6 +32,104 @@ st.set_page_config(
 )
 
 API_BASE_URL = os.getenv("API_BASE_URL", "http://127.0.0.1:8000")
+
+# --------------------- Evaluation Mode ---------------------
+query_params = st.query_params
+
+
+def _get_query_param(name: str, default: Any = None) -> Any:
+    value = query_params.get(name)
+    if isinstance(value, list):
+        return value[0] if value else default
+    return value if value is not None else default
+
+
+def _parse_bool(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    return str(value).strip().lower() == "true"
+
+
+def _parse_int(value: Any, default: int) -> int:
+    try:
+        return int(value)
+    except (ValueError, TypeError):
+        return default
+
+
+is_eval_mode = _parse_bool(_get_query_param("eval_mode", "false"))
+
+if is_eval_mode:
+    eval_question = _get_query_param("query", "").strip()
+    eval_top_k = _parse_int(_get_query_param("chunks", "3"), 3)
+    eval_use_reranker = _parse_bool(_get_query_param("rerank", "false"))
+    eval_use_hybrid = _parse_bool(_get_query_param("hybrid", "false"))
+    eval_phase = _get_query_param("ablation", None)
+    eval_rewriting_strategy = _get_query_param("rewriting_strategy", "none")
+
+    if not eval_question:
+        st.json({"status": "error", "message": "Missing 'query' parameter."})
+        st.stop()
+
+    try:
+        store = load_search_store()
+        if store is None:
+            st.json(
+                {
+                    "status": "error",
+                    "message": "No indexed documents found. Upload or ingest sources first.",
+                }
+            )
+            st.stop()
+
+        req = QueryRequest(
+            question=eval_question,
+            top_k=eval_top_k,
+            use_reranker=eval_use_reranker,
+            use_hybrid=eval_use_hybrid,
+            rewriting_strategy=eval_rewriting_strategy,
+            phase=eval_phase,
+        )
+        flags = get_query_settings(req)
+
+        query_text, query_vector = rewrite_and_embed_query(
+            eval_question,
+            use_query_rewriter=flags.get("use_query_rewriter", True),
+            history=None,
+            rewriting_strategy=eval_rewriting_strategy,
+        )
+
+        retrieved = search_documents(
+            store,
+            query_text,
+            query_vector,
+            top_k=eval_top_k,
+            use_hybrid=flags["use_hybrid"],
+            use_reranker=flags["use_reranker"],
+        )
+
+        retrieved_context_keys = []
+        for doc in retrieved:
+            meta = doc.get("metadata") or {}
+            doc_id = (
+                meta.get("doc_id")
+                or meta.get("source_file")
+                or meta.get("file")
+                or doc.get("id")
+            )
+            if doc_id:
+                retrieved_context_keys.append(str(doc_id))
+
+        st.json(
+            {
+                "status": "success",
+                "retrieved_context_keys": retrieved_context_keys,
+            }
+        )
+    except Exception as e:
+        st.json({"status": "error", "message": str(e)})
+
+    st.stop()
 
 # --------------------- Sidebar ---------------------
 with st.sidebar:
