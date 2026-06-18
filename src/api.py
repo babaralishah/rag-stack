@@ -874,3 +874,106 @@ def clear_cache_endpoint():
     except Exception as e:
         logger.error(f"Cache clear failed: {e}")
         raise HTTPException(status_code=500, detail="Failed to clear cache")
+
+
+# ============================================================================
+# EVALUATION ENDPOINT - For automated benchmark/ablation testing
+# ============================================================================
+class EvalRequest(BaseModel):
+    """Evaluation request for retrieval-only (no LLM generation)"""
+    query: str
+    chunks: int = TOP_K
+    rerank: str = "true"
+    hybrid: str = "true"
+    ablation: Optional[str] = None
+    rewriting_strategy: str = "none"
+
+
+class EvalResponse(BaseModel):
+    """Response containing only retrieved context keys"""
+    status: str
+    retrieved_context_keys: List[str] = []
+    message: Optional[str] = None
+
+
+def _parse_bool_param(value: str) -> bool:
+    """Parse string boolean parameter"""
+    return str(value).strip().lower() == "true"
+
+
+@app.post("/eval", response_model=EvalResponse)
+def eval_retrieval(req: EvalRequest):
+    """
+    Retrieval-only endpoint for automated evaluation/ablation testing.
+    
+    Accepts query parameters:
+    - query: The search question
+    - chunks: Number of results to retrieve (top_k)
+    - rerank: "true" or "false" to enable cross-encoder reranking
+    - hybrid: "true" or "false" to enable hybrid (BM25 + semantic) search
+    - ablation: Optional phase/ablation identifier (e.g., "V1", "V2")
+    - rewriting_strategy: "none", "keyword_expansion", or "hyde"
+    
+    Returns: {
+        "status": "success",
+        "retrieved_context_keys": ["doc_key_1", "doc_key_2", ...]
+    }
+    """
+    try:
+        # Validate and parse inputs
+        query_text = req.query.strip()
+        if not query_text:
+            return EvalResponse(status="error", message="Query parameter is empty")
+        
+        top_k = max(1, min(req.chunks, 50))  # Clamp between 1 and 50
+        use_rerank = _parse_bool_param(req.rerank)
+        use_hybrid = _parse_bool_param(req.hybrid)
+        rewriting_strategy = req.rewriting_strategy.strip().lower()
+        
+        logger.info(f"📊 EVAL ENDPOINT: query='{query_text[:60]}...' | chunks={top_k} | rerank={use_rerank} | hybrid={use_hybrid} | strategy={rewriting_strategy}")
+        
+        # Load vector store
+        store = load_search_store()
+        if store is None:
+            return EvalResponse(
+                status="error",
+                message="No indexed documents found. Upload sources first."
+            )
+        
+        # Rewrite query (if strategy != "none") and embed
+        query_final, query_vector = rewrite_and_embed_query(
+            query_text,
+            use_query_rewriter=(rewriting_strategy != "none"),
+            history=None,
+            rewriting_strategy=rewriting_strategy,
+        )
+        
+        # Retrieve documents
+        retrieved = search_documents(
+            store,
+            query_final,
+            query_vector,
+            top_k=top_k,
+            use_hybrid=use_hybrid,
+            use_reranker=use_rerank,
+        )
+        
+        # Extract document IDs from retrieved chunks
+        retrieved_keys = []
+        for doc in retrieved:
+            meta = doc.get("metadata") or {}
+            doc_id = (
+                meta.get("doc_id")
+                or meta.get("source_file")
+                or meta.get("file")
+                or doc.get("id")
+            )
+            if doc_id:
+                retrieved_keys.append(str(doc_id))
+        
+        logger.info(f"✅ EVAL returned {len(retrieved_keys)} keys: {retrieved_keys[:5]}...")
+        return EvalResponse(status="success", retrieved_context_keys=retrieved_keys)
+        
+    except Exception as e:
+        logger.error(f"❌ EVAL endpoint failed: {e}", exc_info=True)
+        return EvalResponse(status="error", message=str(e))

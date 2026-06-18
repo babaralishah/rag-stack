@@ -1,77 +1,79 @@
 import pandas as pd
 import requests
+import json
 import time
 
 # --- 1. CONFIGURATION ---
 EXCEL_FILE = "Evaluation.xlsx"
-STREAMLIT_URL = "https://babaralishah-rag-llm-app.hf.space"
+# Copilot started your background FastAPI server on port 8001:
+LOCAL_API_URL = "http://127.0.0.1:8001/eval"
 
-# --- 2. DEFINE YOUR ABLATION MATRIX MATRIX ---
-# Adjust these values to run different experimental combinations!
+# Define the exact ablation configuration you want to test right now
 TEST_CONFIG = {
-    "eval_mode": "true",
-    "chunks": "4",                      # Slider value
-    "rerank": "true",                    # "true" or "false" string
-    "hybrid": "false",                   # "true" or "false" string
-    "ablation": "V1",                    # Your dropdown configuration (V1, V2, etc.)
-    "rewriting_strategy": "none"         # Your query rewriting choice
+    "chunks": 4,                        # Integer
+    "rerank": True,                     # Boolean (True/False)
+    "hybrid": False,                    # Boolean (True/False)
+    "ablation": "V1",                    # String choice
+    "rewriting_strategy": "none"         # String choice
 }
 
-# --- 3. LOAD EXCEL BENCHMARK ---
-df = pd.read_excel(EXCEL_FILE)
+# --- 2. LOAD EXCEL BENCHMARK ---
+try:
+    df = pd.read_excel(EXCEL_FILE)
+except Exception as e:
+    print(f"❌ Error reading {EXCEL_FILE}: {e}")
+    exit()
+
 successful_retrievals = 0
 total_questions = len(df)
 
-print(f"🚀 Launching Benchmark Matrix...")
+print(f"🚀 Launching Local API Benchmark Matrix...")
+print(f"⚙️ Target Endpoint -> {LOCAL_API_URL}")
 print(f"⚙️ Params -> Phase: {TEST_CONFIG['ablation']} | Rerank: {TEST_CONFIG['rerank']} | Chunks: {TEST_CONFIG['chunks']}\n")
 
-# --- 4. BENCHMARK EXECUTION LOOP ---
+# --- 3. BENCHMARK EXECUTION LOOP ---
 for index, row in df.iterrows():
     question = row['question']
     
-    # Process the ground-truth target keys from Excel (assumes comma-separated)
+    # Process and clean the ground-truth target keys from Excel (handles brackets, quotes, and spaces)
     expected_keys_raw = str(row['all_relevant_sentence_keys'])
+    for char in ['[', ']', '"', "'"]:
+        expected_keys_raw = expected_keys_raw.replace(char, '')
     expected_keys = [k.strip() for k in expected_keys_raw.split(',') if k.strip()]
     
-    # Inject the specific question into the parameter payload package
+    # Construct the JSON payload package matching Copilot's FastAPI Pydantic schema
     payload = TEST_CONFIG.copy()
     payload['query'] = question
     
     try:
-        # Streamlit reads these values directly out of the URL query string
-        response = requests.get(STREAMLIT_URL, params=payload)
-        # --- ADDED DEBUG CODE ---
-        print(f"Row {index+1} Debug - Status Code: {response.status_code}")
-        if "application/json" not in response.headers.get("Content-Type", ""):
-            print("⚠️ Server did NOT return JSON! Here is the beginning of what it returned:")
-            print(response.text[:500]) # Prints the first 500 characters of the webpage/error
-            break # Stop after row 1 to inspect the error
-        # ------------------------
-        
-        response_data = response.json()
+        # Copilot configured the FastAPI endpoint to listen for POST requests
+        response = requests.post(LOCAL_API_URL, json=payload, headers={"Content-Type": "application/json"})
         
         if response.status_code == 200:
             response_data = response.json()
             retrieved_keys = response_data.get('retrieved_context_keys', [])
             
+            # Clean up whatever formats come out of your vector db keys to match Excel strings
+            retrieved_keys_clean = [str(k).replace('"', '').replace("'", "").strip() for k in retrieved_keys]
+            
             # Check if all ground-truth keys were found in the database results
-            all_found = all(key in retrieved_keys for key in expected_keys)
+            all_found = all(key in retrieved_keys_clean for key in expected_keys)
             
             if all_found:
                 successful_retrievals += 1
                 print(f"Row {index+1}: ✅ Match! All keys caught.")
             else:
-                print(f"Row {index+1}: ❌ Miss. Wanted {expected_keys}, got {retrieved_keys}")
+                print(f"Row {index+1}: ❌ Miss. Wanted {expected_keys}, got {retrieved_keys_clean}")
         else:
-            print(f"Row {index+1}: ⚠️ HTTP Error {response.status_code} returned from server.")
+            print(f"Row {index+1}: ⚠️ HTTP Error {response.status_code}: {response.text}")
             
     except Exception as e:
-        print(f"Row {index+1}: ⚠️ Failed to evaluate row: {e}")
+        print(f"Row {index+1}: ⚠️ Failed to connect/evaluate row: {e}")
         
-    # Micro delay to prevent overloading your Hugging Face Space CPU core
-    time.sleep(0.1)
+    # Micro pause to prevent slamming your local CPU threads
+    time.sleep(0.05)
 
-# --- 5. SCORING METRICS ---
+# --- 4. SCORING METRICS ---
 retrieval_score = (successful_retrievals / total_questions) * 100
 print("\n" + "="*45)
 print(f"📊 RETRIEVAL ACCURACY SCORE: {retrieval_score:.2f}%")

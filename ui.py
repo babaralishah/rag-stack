@@ -2,6 +2,9 @@
 import os
 import streamlit as st
 import requests
+import threading
+import time
+import logging
 from typing import Dict, Any
 
 from src.api import (
@@ -10,7 +13,10 @@ from src.api import (
     load_search_store,
     rewrite_and_embed_query,
     search_documents,
+    app as fastapi_app,  # Import the FastAPI app instance
 )
+
+logger = logging.getLogger("rag")
 
 
 def format_api_error(exc: Exception) -> str:
@@ -32,6 +38,57 @@ st.set_page_config(
 )
 
 API_BASE_URL = os.getenv("API_BASE_URL", "http://127.0.0.1:8000")
+EVAL_SERVER_PORT = int(os.getenv("EVAL_SERVER_PORT", "8001"))
+EVAL_SERVER_HOST = os.getenv("EVAL_SERVER_HOST", "127.0.0.1")
+
+# ============================================================================
+# BACKGROUND FASTAPI SERVER LAUNCHER (Thread-Safe)
+# ============================================================================
+_fastapi_server_started = False
+_fastapi_server_lock = threading.Lock()
+
+
+@st.cache_resource
+def launch_fastapi_server():
+    """
+    Launch the FastAPI server on a background thread.
+    Uses Streamlit's @st.cache_resource to ensure it runs only once per session.
+    """
+    global _fastapi_server_started
+    
+    with _fastapi_server_lock:
+        if _fastapi_server_started:
+            return
+        
+        _fastapi_server_started = True
+        
+        def run_server():
+            """Run FastAPI server on background thread"""
+            import uvicorn
+            try:
+                logger.info(f"🚀 Starting FastAPI evaluation server on {EVAL_SERVER_HOST}:{EVAL_SERVER_PORT}")
+                uvicorn.run(
+                    fastapi_app,
+                    host=EVAL_SERVER_HOST,
+                    port=EVAL_SERVER_PORT,
+                    log_level="info",
+                    access_log=True,
+                )
+            except Exception as e:
+                logger.error(f"❌ FastAPI server error: {e}")
+        
+        # Launch server on daemon thread
+        server_thread = threading.Thread(target=run_server, daemon=True)
+        server_thread.start()
+        
+        # Give server a moment to start
+        time.sleep(0.5)
+        logger.info(f"✅ FastAPI evaluation server launched (threaded mode)")
+
+
+# Launch the FastAPI evaluation server once at startup
+launch_fastapi_server()
+
 
 # --------------------- Evaluation Mode ---------------------
 query_params = st.query_params
