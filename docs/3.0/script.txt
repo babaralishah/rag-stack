@@ -1,0 +1,66 @@
+import pandas as pd
+import requests
+import time
+
+# --- 1. CONFIGURATION ---
+EXCEL_FILE = "rag_evaluation.xlsx"
+HF_API_URL = "https://huggingface.co" 
+HF_TOKEN = "hf_your_actual_access_token_here"
+
+headers = {"Authorization": f"Bearer {HF_TOKEN}"}
+
+# --- GROQ RATE LIMIT SETTINGS ---
+DELAY_BETWEEN_REQUESTS = 2.5  # Pauses 2.5 seconds per row to stay under 30 RPM
+BACKOFF_DELAY = 15            # If Groq hits a 429 limit, pause for 15 seconds
+
+# --- 2. LOAD DATA ---
+df = pd.read_excel(EXCEL_FILE)
+successful_retrievals = 0
+total_questions = len(df)
+
+print(f"🚀 Starting rate-safe evaluation on {total_questions} questions...")
+
+# --- 3. EVALUATION LOOP ---
+for index, row in df.iterrows():
+    question = row['question']
+    expected_keys_raw = str(row['all_relevant_sentence_keys'])
+    expected_keys = [k.strip() for k in expected_keys_raw.split(',') if k.strip()]
+    
+    payload = {"inputs": question}
+    
+    # Retry mechanism specifically designed to survive Groq free-tier limits
+    while True:
+        try:
+            response = requests.post(HF_API_URL, headers=headers, json=payload)
+            
+            # If Groq returns a rate limit error (HTTP 429)
+            if response.status_code == 429:
+                print(f"⚠️ Groq Rate Limit Hit! Cooling down for {BACKOFF_DELAY} seconds...")
+                time.sleep(BACKOFF_DELAY)
+                continue  # Retry the exact same question
+                
+            response_data = response.json()
+            retrieved_keys = response_data.get('retrieved_context_keys', [])
+            
+            all_found = all(key in retrieved_keys for key in expected_keys)
+            
+            if all_found:
+                successful_retrievals += 1
+                print(f"Row {index+1}: ✅ Success!")
+            else:
+                print(f"Row {index+1}: ❌ Fail. Expected {expected_keys}, got {retrieved_keys}")
+            
+            break  # Break out of the retry loop, move to next question
+            
+        except Exception as e:
+            print(f"Row {index+1}: ⚠️ System Error: {e}")
+            break
+
+    # Strategic pause after every single question to respect Groq's RPM limit
+    time.sleep(DELAY_BETWEEN_REQUESTS)
+
+# --- 4. FINAL CALCULATION ---
+retrieval_score = (successful_retrievals / total_questions) * 100
+print("\n" + "="*30)
+print(f"📊 FINAL RETRIEVAL SCORE: {retrieval_score:.2f}%")
+print("="*30)
