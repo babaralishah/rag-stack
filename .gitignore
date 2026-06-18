@@ -28,6 +28,11 @@ storage/
 data/uploads/
 rag.log
 
+
+script.py
+Enterprise_Corporate_Policies_Manual.pdf
+data source.docx
+
 # Extras
 DEBUGGING_GUIDE.md
 INTERVIEW_SUMMARY.md
