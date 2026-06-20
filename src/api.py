@@ -11,6 +11,7 @@ from typing import Optional, List, Dict, Any, Literal
 from datetime import datetime
 import hashlib
 import json
+from dotenv import load_dotenv
 
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from pydantic import BaseModel, HttpUrl
@@ -59,6 +60,9 @@ logging.basicConfig(
         logging.FileHandler("rag.log", encoding="utf-8"),
     ],
 )
+
+# Load environment variables early so LLM clients can read API keys.
+load_dotenv()
 
 logger = logging.getLogger("rag")
 logger.setLevel(logging.INFO)
@@ -559,13 +563,27 @@ def get_cached_query_response(cache_key: str) -> QueryResponse | None:
     )
 
 
+# def load_search_store() -> FaissVectorStore | None:
+#     """Load the vector store when persisted metadata and index exist."""
+#     index_path = STORE_DIR / "index.faiss"
+#     meta_path = STORE_DIR / "meta.jsonl"
+#     if not index_path.exists() or not meta_path.exists():
+#         return None
+#     return load_or_create_store(dim=EMBED_DIM)
+
 def load_search_store() -> FaissVectorStore | None:
-    """Load the vector store when persisted metadata and index exist."""
+    """Load the vector store when persisted metadata and index exist, else create it."""
     index_path = STORE_DIR / "index.faiss"
     meta_path = STORE_DIR / "meta.jsonl"
+    
+    # 🛠️ THE FIX: If files are missing, force the system to build them!
     if not index_path.exists() or not meta_path.exists():
-        return None
+        print("⚠️ Database files missing! Building new FAISS index from data source.pdf...")
+        # This triggers your app's built-in creation function automatically
+        return load_or_create_store(dim=EMBED_DIM)
+        
     return load_or_create_store(dim=EMBED_DIM)
+
 
 
 def rewrite_and_embed_query(
@@ -573,7 +591,7 @@ def rewrite_and_embed_query(
     use_query_rewriter: bool = True,
     history: list | None = None,
     rewriting_strategy: str = "hyde",
-) -> tuple[str, Any]:
+) -> tuple[str, Any, bool]:
     """Rewrite the user question (optionally using recent history) and embed it for retrieval."""
     
     logger.info("============== PIPELINE ENTRY ==============")
@@ -582,7 +600,7 @@ def rewrite_and_embed_query(
     logger.info(f"📥 History Chunks Received: {history}")
     
     if not use_query_rewriter or rewriting_strategy == "none":
-        return question, get_embedder().embed_query(question)
+        return question, get_embedder().embed_query(question), False
 
     from src.query_rewriter import rewrite_query
 
@@ -590,7 +608,8 @@ def rewrite_and_embed_query(
     logger.info(f"📤 Final Search String returning from pipeline: '{rewritten}'")
     logger.info("=============================================")
     query_vector = get_embedder().embed_query(rewritten)
-    return rewritten, query_vector
+    query_was_rewritten = rewritten.strip().lower() != question.strip().lower()
+    return rewritten, query_vector, query_was_rewritten
 
 
 def search_documents(
@@ -765,12 +784,18 @@ def query(req: QueryRequest):
             )
 
         # flags already resolved above
-        query_text, query_vector = rewrite_and_embed_query(
+        query_text, query_vector, _query_was_rewritten = rewrite_and_embed_query(
             question,
             use_query_rewriter=flags.get("use_query_rewriter", True),
             history=history if history else None,  # <-- FIXED: Use history if it exists, regardless of the flag!
             rewriting_strategy=rewriting_strategy,
         )
+        if rewriting_strategy != "none" and query_text.strip().lower() == question.strip().lower():
+            logger.error(
+                "Rewrite collapse detected in /query. strategy=%s question='%s'",
+                rewriting_strategy,
+                question[:160],
+            )
         retrieved = search_documents(
             store,
             query_text,
@@ -886,19 +911,32 @@ class EvalRequest(BaseModel):
     rerank: str = "true"
     hybrid: str = "true"
     ablation: Optional[str] = None
-    rewriting_strategy: str = "none"
+    rewriting_strategy: Literal["none", "keyword_expansion", "hyde"] = "none"
+    use_query_rewriter: Optional[str] = None
+    use_chat_history: Optional[str] = None
+    history: Optional[List[ChatMessage]] = None
 
 
 class EvalResponse(BaseModel):
     """Response containing only retrieved context keys"""
     status: str
     retrieved_context_keys: List[str] = []
+    query_was_rewritten: bool = False
     message: Optional[str] = None
 
 
 def _parse_bool_param(value: str) -> bool:
     """Parse string boolean parameter"""
     return str(value).strip().lower() == "true"
+
+
+def _resolve_optional_bool(explicit_value: Optional[str], phase_value: Optional[bool], default: bool) -> bool:
+    """Resolve booleans with explicit request values taking precedence over phase presets."""
+    if explicit_value is not None:
+        return _parse_bool_param(explicit_value)
+    if phase_value is not None:
+        return phase_value
+    return default
 
 
 @app.post("/eval", response_model=EvalResponse)
@@ -916,7 +954,7 @@ def eval_retrieval(req: EvalRequest):
     
     Returns: {
         "status": "success",
-        "retrieved_context_keys": ["doc_key_1", "doc_key_2", ...]
+        "retrieved_context_keys": ["extracted text block 1", "extracted text block 2", ...]
     }
     """
     try:
@@ -926,11 +964,46 @@ def eval_retrieval(req: EvalRequest):
             return EvalResponse(status="error", message="Query parameter is empty")
         
         top_k = max(1, min(req.chunks, 50))  # Clamp between 1 and 50
-        use_rerank = _parse_bool_param(req.rerank)
-        use_hybrid = _parse_bool_param(req.hybrid)
         rewriting_strategy = req.rewriting_strategy.strip().lower()
-        
-        logger.info(f"📊 EVAL ENDPOINT: query='{query_text[:60]}...' | chunks={top_k} | rerank={use_rerank} | hybrid={use_hybrid} | strategy={rewriting_strategy}")
+
+        # Optional phase/ablation controls for evaluation experiments.
+        phase_flags = resolve_phase_flags(req.ablation)
+
+        use_rerank = _resolve_optional_bool(req.rerank, phase_flags.get("use_reranker"), True)
+        use_hybrid = _resolve_optional_bool(req.hybrid, phase_flags.get("use_hybrid"), True)
+        use_query_rewriter = (
+            _parse_bool_param(req.use_query_rewriter)
+            if req.use_query_rewriter is not None
+            else (rewriting_strategy != "none")
+        )
+        use_chat_history = _resolve_optional_bool(
+            req.use_chat_history,
+            phase_flags.get("use_chat_history"),
+            False,
+        )
+
+        # Explicit request strategy wins over phase presets.
+        if not use_query_rewriter:
+            rewriting_strategy = "none"
+
+        history = (
+            normalize_chat_history(req.history)
+            if use_chat_history and req.history
+            else None
+        )
+
+        logger.info(
+            "📊 EVAL ENDPOINT: query='%s...' | chunks=%s | rerank=%s | hybrid=%s | "
+            "rewriter=%s | strategy=%s | chat_history=%s | phase=%s",
+            query_text[:60],
+            top_k,
+            use_rerank,
+            use_hybrid,
+            use_query_rewriter,
+            rewriting_strategy,
+            use_chat_history,
+            req.ablation,
+        )
         
         # Load vector store
         store = load_search_store()
@@ -941,12 +1014,18 @@ def eval_retrieval(req: EvalRequest):
             )
         
         # Rewrite query (if strategy != "none") and embed
-        query_final, query_vector = rewrite_and_embed_query(
+        query_final, query_vector, query_was_rewritten = rewrite_and_embed_query(
             query_text,
-            use_query_rewriter=(rewriting_strategy != "none"),
-            history=None,
+            use_query_rewriter=use_query_rewriter,
+            history=history,
             rewriting_strategy=rewriting_strategy,
         )
+        if rewriting_strategy != "none" and not query_was_rewritten:
+            logger.error(
+                "Rewrite collapse detected in /eval. strategy=%s query='%s'",
+                rewriting_strategy,
+                query_text[:160],
+            )
         
         # Retrieve documents
         retrieved = search_documents(
@@ -958,21 +1037,39 @@ def eval_retrieval(req: EvalRequest):
             use_reranker=use_rerank,
         )
         
-        # Extract document IDs from retrieved chunks
+        # 🛠️ FIXED: Extract raw text content instead of doc_id for evaluation string comparison
+        retrieved_keys = []
+                # 🛠️ NATIVE TEXT EXTRACTOR: Bulletproof extraction for both dictionaries and objects
         retrieved_keys = []
         for doc in retrieved:
-            meta = doc.get("metadata") or {}
-            doc_id = (
-                meta.get("doc_id")
-                or meta.get("source_file")
-                or meta.get("file")
-                or doc.get("id")
-            )
-            if doc_id:
-                retrieved_keys.append(str(doc_id))
+            text_content = ""
+            
+            # 1. Try dictionary lookup
+            if hasattr(doc, "get"):
+                text_content = doc.get("text") or doc.get("page_content") or doc.get("content") or ""
+            
+            # 2. Try object attribute lookup fallback
+            if not text_content:
+                text_content = (
+                    getattr(doc, "text", None) or 
+                    getattr(doc, "page_content", None) or 
+                    getattr(doc, "content", "")
+                )
+            
+            # 3. Last resort fallback: Convert the whole thing to a string to catch any text
+            if not text_content:
+                text_content = str(doc)
+                
+            if text_content:
+                retrieved_keys.append(str(text_content))
         
-        logger.info(f"✅ EVAL returned {len(retrieved_keys)} keys: {retrieved_keys[:5]}...")
-        return EvalResponse(status="success", retrieved_context_keys=retrieved_keys)
+        logger.info(f"✅ EVAL successfully returned {len(retrieved_keys)} raw text chunks to client.")
+        return EvalResponse(
+            status="success",
+            retrieved_context_keys=retrieved_keys,
+            query_was_rewritten=bool(query_was_rewritten),
+        )
+
         
     except Exception as e:
         logger.error(f"❌ EVAL endpoint failed: {e}", exc_info=True)

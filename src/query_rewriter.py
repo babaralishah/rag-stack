@@ -67,6 +67,7 @@ Do not add any explanation, headers, or labels.
 
 Return only the keyword list:"""
         max_tokens = 80
+        temperature = 0.0
 
 # The HyDE (Hypothetical Document Excerpt) strategy prompts the LLM to generate a concise, authoritative-sounding excerpt that could plausibly be found in a technical document answering the user's question. This can help guide the retrieval system to find documents that contain similar language and concepts, even if they don't match the original question verbatim.
     else:
@@ -79,17 +80,22 @@ Do not include any labels, headings, or explanations.
 
 Return only the hypothetical document excerpt:"""
         max_tokens = 220
+        temperature = 0.2
 
     try:
         rewritten = generate_answer(
             prompt=prompt,
-            model="gemini-2.5-flash-lite",
-            temperature=0.3,
+            model="llama-3.3-70b-versatile",
+            temperature=temperature,
             max_tokens=max_tokens,
         )
 
-        if "llm error" in rewritten.lower() or "error" in rewritten.lower():
-            logger.warning("LLM API returned an error string. Falling back to original query.")
+        if "llm error" in rewritten.lower() or rewritten.strip().lower().startswith("error"):
+            logger.error(
+                "Rewrite generation failed for strategy=%s. Returning original query. Output=%s",
+                strategy,
+                rewritten[:200],
+            )
             return original_question
             
         
@@ -101,12 +107,13 @@ Return only the hypothetical document excerpt:"""
             rewritten = rewritten.strip()
 
         if not rewritten:
-            logger.info("Query rewrite returned empty text; using original question.")
+            logger.error("Query rewrite returned empty text for strategy=%s; using original question.", strategy)
             return original_question
 
         if rewritten.lower() == original_question.lower():
-            logger.info(
-                "Query rewrite returned the original question unchanged; using original."
+            logger.error(
+                "Query rewrite collapsed to original text for strategy=%s; using original.",
+                strategy,
             )
             return original_question
 
@@ -117,7 +124,7 @@ Return only the hypothetical document excerpt:"""
             return original_question
 
         if strategy == "hyde" and len(rewritten) < 40:
-            logger.info("HyDE output too short, using original question.")
+            logger.error("HyDE output too short (%s chars), using original question.", len(rewritten))
             return original_question
 
         logger.info(f"🔄 QUERY REWRITE STRATEGY: {strategy}")

@@ -117,16 +117,16 @@ def _parse_int(value: Any, default: int) -> int:
 is_eval_mode = _parse_bool(_get_query_param("eval_mode", "false"))
 
 if is_eval_mode:
-    eval_question = _get_query_param("query", "").strip()
-    eval_top_k = _parse_int(_get_query_param("chunks", "3"), 3)
-    eval_use_reranker = _parse_bool(_get_query_param("rerank", "false"))
-    eval_use_hybrid = _parse_bool(_get_query_param("hybrid", "false"))
-    eval_phase = _get_query_param("ablation", None)
-    eval_rewriting_strategy = _get_query_param("rewriting_strategy", "none")
+    # eval_question = _get_query_param("query", "").strip()
+    # eval_top_k = _parse_int(_get_query_param("chunks", "3"), 3)
+    # eval_use_reranker = _parse_bool(_get_query_param("rerank", "false"))
+    # eval_use_hybrid = _parse_bool(_get_query_param("hybrid", "false"))
+    # eval_phase = _get_query_param("ablation", None)
+    # eval_rewriting_strategy = _get_query_param("rewriting_strategy", "none")
 
-    if not eval_question:
-        st.json({"status": "error", "message": "Missing 'query' parameter."})
-        st.stop()
+    # if not eval_question:
+    #     st.json({"status": "error", "message": "Missing 'query' parameter."})
+    st.stop()
 
     try:
         store = load_search_store()
