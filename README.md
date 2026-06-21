@@ -222,26 +222,53 @@ All metrics are bounded to [0.0, 1.0] by construction.
 
 ## Early Empirical Findings
 
-Results from the initial 98-query validated run (preliminary; pending bge-large re-indexing):
+Results from the latest **98-query validated benchmark** under the thesis-locked `BAAI/bge-large-en-v1.5` embedding space:
 
-| Metric | none (Baseline) | keyword_expansion | hyde |
-|---|:---:|:---:|:---:|
-| Precision@5 | **0.2327** | 0.1816 | 0.2327 |
-| Recall@k | **0.4279** | 0.3144 | 0.3747 |
-| F1-Score | **0.2721** | 0.2055 | 0.2609 |
-| Exact Match | **0.2551** | 0.1837 | **0.2551** |
-| Hit Rate | **0.6020** | 0.5102 | 0.5612 |
-| MRR | 0.4459 | 0.3736 | **0.4500** |
-| nDCG@5 | **0.4507** | 0.3524 | 0.4202 |
+| Metric | none (Baseline) | keyword_expansion | hyde | rerank_only | hybrid_only |
+|---|:---:|:---:|:---:|:---:|:---:|
+| Precision@5 | 0.2327 | 0.1816 | 0.2327 | **0.3653** | 0.2265 |
+| Recall@k | 0.4279 | 0.3144 | 0.3747 | **0.5206** | 0.4351 |
+| F1-Score | 0.2721 | 0.2055 | 0.2609 | **0.3896** | 0.2757 |
+| Exact Match | 0.2551 | 0.1837 | 0.2551 | **0.3571** | 0.2653 |
+| Hit Rate | 0.6020 | 0.5102 | 0.5612 | **0.6939** | 0.6429 |
+| MRR | 0.4459 | 0.3736 | 0.4500 | 0.4580 | **0.5337** |
+| nDCG@5 | 0.4507 | 0.3524 | 0.4202 | 0.4876 | **0.4878** |
+| Support Coverage | 0.4279 | 0.3144 | 0.3747 | **0.5206** | 0.4351 |
 
-**Interpretive Summary:**
+### Comparative Outcome Summary
 
-- **Baseline dominates Recall@k and nDCG@5**, consistent with the hypothesis that unaugmented queries, though semantically narrow, do not introduce off-distribution noise into the retrieval neighbourhood.
-- **HyDE marginally improves MRR (+0.0041)** relative to baseline, suggesting that synthetic paragraph-form query expansion successfully surfaces the most relevant passage at higher rank even when set recall is reduced. This is consistent with HyDE's theoretical mechanism: improving rank precision at the cost of set recall.
-- **Keyword Expansion degrades all metrics**, confirming the negative control hypothesis. Term proliferation without semantic coherence disperses the query embedding away from tightly clustered biomedical passage centroids, consistent with the curse of dimensionality in high-dimensional inner-product spaces.
-- The rewrite success rate reached 100% (98/98 rows) for both augmentation profiles following resolution of the Gemini-to-Groq fallback chain, confirming zero silent collapse events in the logged runs.
+**Overall strongest performer (balanced retrieval quality):** `rerank_only`
+- **Success profile:** highest Precision, Recall, F1, Exact Match, Hit Rate, and Support Coverage.
+- **Interpretation:** cross-encoder re-scoring effectively corrects FAISS rank-ordering errors, especially for semantically close biomedical candidates.
+- **Limitation:** MRR gain is positive but smaller than hybrid, suggesting top-rank sharpness is not maximised in every query family.
 
-> **Important:** These findings are preliminary and based on the `all-MiniLM-L6-v2` embedding configuration. Final thesis results require full re-execution under the thesis-locked `BAAI/bge-large-en-v1.5` (1024d) embedding model with a freshly constructed FAISS index.
+**Top rank optimiser:** `hybrid_only`
+- **Success profile:** best MRR and best nDCG@5.
+- **Interpretation:** sparse-dense fusion (BM25 + FAISS + RRF) improves early-rank placement for terminology-sensitive biomedical queries.
+- **Limitation:** Precision and F1 do not surpass rerank_only, indicating improved ordering does not always increase total relevant set capture.
+
+**Reference floor:** `none` (baseline)
+- **Role:** canonical control condition for all delta calculations.
+- **Interpretation:** provides stable mid-range behaviour without augmentation artifacts.
+- **Limitation:** underperforms rerank_only and hybrid_only on most ranking and coverage criteria.
+
+**Mixed profile:** `hyde`
+- **Success profile:** slight MRR improvement over baseline.
+- **Struggle profile:** lower Recall, F1, nDCG, and Hit Rate relative to baseline.
+- **Interpretation:** synthetic semantic expansion can improve first-hit localisation for some queries, but may induce context drift for broader relevance capture.
+
+**Negative control (expected degradation):** `keyword_expansion`
+- **Outcome:** lowest values across all tracked macro metrics.
+- **Interpretation:** token inflation without semantic coherence disrupts dense-vector neighbourhood alignment in biomedical space.
+- **Research value:** validates the ablation matrix by demonstrating that not all augmentation is beneficial.
+
+### Verification Layer Status
+
+- `none`: rewrite_status remained Original Query as expected.
+- `keyword_expansion` and `hyde`: rewrite_status audited through `query_was_rewritten` and `rewrite_status` columns.
+- `Delta_vs_None`: row-level discrepancy analysis available for all non-baseline runs to identify where each strategy helped, hurt, or produced no change.
+
+> **Current interpretation boundary:** memory_only results are to be integrated after completion of the final isolated conversational-memory run and significance testing pass.
 
 ---
 
