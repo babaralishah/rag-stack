@@ -34,15 +34,41 @@ class FaissVectorStore:
         self.bm25: Optional[BM25Okapi] = None
         self.records: List[Dict[str, Any]] = []
 
+    def _prepare_embeddings_for_faiss(self, embeddings: np.ndarray) -> np.ndarray:
+        """Cast to float32, validate shape, and L2-normalize for cosine search."""
+        arr = np.asarray(embeddings, dtype=np.float32)
+        if arr.ndim != 2:
+            raise ValueError(f"Expected 2D embeddings, got shape={arr.shape}")
+        if arr.shape[1] != self.dim:
+            raise ValueError(
+                f"Embedding dim mismatch: index dim={self.dim}, vectors dim={arr.shape[1]}"
+            )
+        arr = np.ascontiguousarray(arr)
+        faiss.normalize_L2(arr)
+        return arr
+
+    def _prepare_query_for_faiss(self, query_vec: np.ndarray) -> np.ndarray:
+        """Cast query to float32, ensure [1, dim], and L2-normalize for cosine search."""
+        arr = np.asarray(query_vec, dtype=np.float32)
+        if arr.ndim == 1:
+            arr = arr.reshape(1, -1)
+        if arr.ndim != 2:
+            raise ValueError(f"Expected 1D/2D query vector, got shape={arr.shape}")
+        if arr.shape[1] != self.dim:
+            raise ValueError(
+                f"Query dim mismatch: index dim={self.dim}, query dim={arr.shape[1]}"
+            )
+        arr = np.ascontiguousarray(arr)
+        faiss.normalize_L2(arr)
+        return arr
+
     def add(
         self, embeddings: np.ndarray, texts: List[str], metadatas: List[Dict[str, Any]]
     ):
         if len(texts) != len(metadatas) or len(texts) != embeddings.shape[0]:
             raise ValueError("Lengths of embeddings, texts, and metadatas must match")
 
-        if embeddings.dtype != np.float32:
-            embeddings = embeddings.astype("float32")
-
+        embeddings = self._prepare_embeddings_for_faiss(embeddings)
         self.index.add(embeddings)
 
         for t, m in zip(texts, metadatas):
@@ -65,10 +91,7 @@ class FaissVectorStore:
     # ====================== INTERNAL SEARCH ======================
 
     def _semantic_search(self, query_vec: np.ndarray, k: int) -> List[Dict[str, Any]]:
-        if query_vec.dtype != np.float32:
-            query_vec = query_vec.astype("float32")
-        if query_vec.ndim == 1:
-            query_vec = query_vec.reshape(1, -1)
+        query_vec = self._prepare_query_for_faiss(query_vec)
 
         scores, indices = self.index.search(query_vec, k)
 
@@ -238,7 +261,8 @@ class FaissVectorStore:
                 embeddings = embedder.embed_texts(texts)
 
                 self.index = faiss.IndexFlatIP(self.dim)
-                self.index.add(embeddings.astype("float32"))
+                embeddings = self._prepare_embeddings_for_faiss(embeddings)
+                self.index.add(embeddings)
                 logger.info(f"Rebuilt FAISS with {len(self.records)} chunks")
             except Exception as e:
                 logger.error(f"FAISS rebuild failed: {e}")

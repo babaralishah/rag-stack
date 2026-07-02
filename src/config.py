@@ -12,8 +12,8 @@ UPLOADS_DIR = DATA_DIR / "uploads"
 
 STORE_DIR = Path("storage") / "faiss"
 
-EMBED_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
-# EMBED_MODEL = "BAAI/bge-large-en-v1.5"
+EMBED_MODEL = "BAAI/bge-large-en-v1.5"
+# EMBED_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
 OLLAMA_MODEL = "llama3.2:3b"
 
 TOP_K = 3

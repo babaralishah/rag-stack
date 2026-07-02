@@ -24,6 +24,12 @@ This framework operationalises a **six-way controlled ablation matrix** designed
 2. Does keyword-based query expansion act as a positive retrieval signal or as a negative control through token inflation in dense vector spaces?
 3. What is the marginal contribution of cross-encoder reranking, BM25-FAISS sparse-dense fusion, and conversational memory enrichment when applied in isolation to the baseline retrieval configuration?
 
+### Quick Results Snapshot
+
+- **Biomedical (primary benchmark):** `rerank_only` is strongest overall; `hybrid_only` is best for early-rank quality (MRR/nDCG).
+- **ScienceQA (external validation):** `hyde` gives best end-task QA accuracy (0.35), while `keyword_expansion` raises support-hit frequency but lowers final answer accuracy.
+- **Cross-dataset lesson:** retrieval-support gains and answer-accuracy gains can diverge; strategy selection should be objective-specific.
+
 ---
 
 ## Repository Structure
@@ -269,6 +275,126 @@ Results from the latest **98-query validated benchmark** under the thesis-locked
 - `Delta_vs_None`: row-level discrepancy analysis available for all non-baseline runs to identify where each strategy helped, hurt, or produced no change.
 
 > **Current interpretation boundary:** memory_only results are to be integrated after completion of the final isolated conversational-memory run and significance testing pass.
+
+### ScienceQA External Validation (100 rows, no GT evidence columns)
+
+To stress-test transferability beyond the biomedical benchmark, the same thesis matrix settings were executed on `scienceqa_eval_dataset.xlsx` (100 processed rows) through `/eval` with locked `top_k=5`, chunking `600/50`, and embedding model `BAAI/bge-large-en-v1.5`.
+
+Because this dataset export does not include ground-truth evidence columns in the expected schema, retrieval metrics such as Precision@k/Recall@nDCG are not computable for this run. The comparison therefore uses the available macro outputs:
+
+- `QA Support Hit`: fraction of rows where at least one retrieved chunk supports the QA item.
+- `QA Support MRR`: early-rank quality of the first supporting chunk.
+- `QA Choice Acc`: final multiple-choice answer accuracy.
+
+| Strategy | QA Support Hit | QA Support MRR | QA Choice Acc | Processed Rows |
+|---|:---:|:---:|:---:|:---:|
+| `none` | 0.0000 | 0.0000 | 0.3000 | 100 |
+| `rerank_only` | 0.0000 | 0.0000 | 0.3000 | 100 |
+| `keyword_expansion` | **0.1000** | 0.0250 | 0.2000 | 100 |
+| `hyde` | 0.0500 | **0.0500** | **0.3500** | 100 |
+
+#### Delta vs Baseline (`none`)
+
+| Strategy | $\Delta$ QA Support Hit | $\Delta$ QA Support MRR | $\Delta$ QA Choice Acc |
+|---|:---:|:---:|:---:|
+| `rerank_only` | +0.0000 | +0.0000 | +0.0000 |
+| `keyword_expansion` | +0.1000 | +0.0250 | -0.1000 |
+| `hyde` | +0.0500 | +0.0500 | +0.0500 |
+
+Interpretation shortcut:
+- `hyde` is the only strategy that improved both support quality and final answer accuracy relative to baseline.
+- `keyword_expansion` improved support detection but reduced end-task accuracy, indicating a support-to-answer conversion gap.
+- `rerank_only` produced no measurable movement on this slice.
+
+### ScienceQA Strategy Effects (Interpretation)
+
+**Best end-task accuracy:** `hyde`
+- `QA Choice Acc` increased from 0.3000 (baseline) to **0.3500**.
+- Despite fewer support hits than keyword expansion, HyDE achieved the best `QA Support MRR`, indicating that when support is found, it is found earlier in ranking.
+- Practical implication: in this dataset, semantically richer rewrites improved answer selection quality more than raw support-hit frequency.
+
+**Highest support-hit frequency but weakest answering:** `keyword_expansion`
+- Highest `QA Support Hit` (0.1000), but low `QA Support MRR` (0.0250) and the lowest `QA Choice Acc` (0.2000).
+- This pattern suggests expanded keywords may retrieve loosely related context but not consistently rank high-value evidence early enough to improve answer decisions.
+- Practical implication: more retrieved support signals did not translate into better final QA outcomes.
+
+**No measurable gain over baseline:** `rerank_only`
+- Identical to baseline on all available metrics in this run (`QA Choice Acc` 0.3000, support metrics 0.0000).
+- Likely interpretation: reranking cannot add value when the candidate pool itself lacks supporting chunks for this schema/configuration slice.
+- Practical implication: reranking remains dependent on upstream retrieval recall.
+
+**Reference behavior:** `none`
+- Serves as control with moderate answer accuracy (0.3000) but no measured support hits.
+- Confirms that this dataset/configuration pairing is challenging for evidence retrieval under current prompt+index settings.
+
+### ScienceQA Conclusion (Current Evidence)
+
+For this new ScienceQA dataset slice, `hyde` is the most effective strategy for end-task QA accuracy, `keyword_expansion` improves support-hit frequency without downstream answer gains, and `rerank_only` shows no standalone benefit under the present retrieval candidate quality. Since GT evidence columns were missing, these findings should be treated as **external validation signals** rather than full retrieval-grounded ablation evidence; adding GT evidence annotations would enable full thesis-metric parity in a future pass.
+
+### Recommended Next Optimization Pass (ScienceQA)
+
+1. **Promote `hyde` as the ScienceQA default profile** for answer-generation runs, since it currently maximizes `QA Choice Acc`.
+2. **Tune HyDE generation temperature in a narrow band (0.1-0.3)** and compare variance across 3 repeated seeds/runs to test stability.
+3. **Run a retrieval-depth sweep (`top_k` = 5, 8, 10)** for `hyde` only, to verify whether support-hit growth converts into additional answer-accuracy gains.
+4. **Add GT evidence columns to ScienceQA export schema** so Precision/Recall/MRR/nDCG can be computed and compared at full thesis-metric parity.
+5. **Evaluate `hyde + rerank` as a controlled compound profile** after isolation studies, to test whether stronger candidate generation plus cross-encoder ordering improves both support and final QA accuracy.
+
+### Threats to Validity and Reproducibility Notes
+
+- **Missing evidence labels:** GT evidence columns were absent, so standard retrieval metrics are unavailable for this run.
+- **Single-run sensitivity:** each profile currently reflects a single macro pass; variance across repeated runs is not yet reported.
+- **Prompt/model dependence:** results are tied to the current model stack and generation settings, especially rewrite temperature.
+- **Dataset transfer caution:** cross-domain transfer (biomedical -> ScienceQA) may change ranking behavior and answer calibration.
+
+To improve reproducibility for thesis reporting:
+- record script commit hash, dataset hash, and exact endpoint flags per run;
+- run each profile at least 3 times and report mean ± std;
+- keep fixed ingestion config (chunk size/overlap) constant within each comparison block.
+
+### Final Thesis Claims (Current Evidence Base)
+
+**Claim 1 (Primary Benchmark Superiority):**
+On the biomedical benchmark under locked retrieval depth and fixed embedding settings, isolated cross-encoder reranking (`rerank_only`) provides the strongest overall retrieval-quality gains across most core metrics, supporting the claim that post-retrieval semantic ordering is a high-impact intervention in dense RAG pipelines.
+
+**Claim 2 (Early-Rank Optimization Effect):**
+Hybrid sparse-dense fusion (`hybrid_only`) delivers the strongest early-rank quality (MRR/nDCG pattern), indicating that lexical-semantic complementarity is particularly effective for first-hit prioritization in terminology-sensitive scientific queries.
+
+**Claim 3 (Dataset-Dependent Query Rewriting Utility):**
+In ScienceQA external validation, HyDE is the only tested strategy that improves both support-quality indicators and end-task answer accuracy relative to baseline, while keyword expansion increases support hits but degrades final answer accuracy. This supports a dataset-dependent view of rewrite effectiveness rather than a universal benefit assumption.
+
+**Claim 4 (Dependency Constraint for Reranking):**
+Where upstream retrieval recall is weak (ScienceQA slice in current schema), reranking alone does not improve outcomes, reinforcing that rerankers optimize candidate order but cannot recover absent evidence.
+
+**Claim 5 (Methodological Contribution):**
+The strict ablation-control design (explicit toggle isolation, locked top-k, rewrite verification auditing, and row-level delta analysis) constitutes a reproducible evaluation protocol for separating true strategy effects from configuration leakage.
+
+### One-Page Dissertation Results Summary
+
+| Dimension | Biomedical Benchmark (Primary) | ScienceQA External Validation (Current Slice) | Thesis-Level Interpretation |
+|---|---|---|---|
+| Best overall profile | `rerank_only` | `hyde` (by QA Choice Acc) | Best strategy is objective- and dataset-dependent |
+| Best early-rank profile | `hybrid_only` (MRR/nDCG leader) | `hyde` (best QA Support MRR) | First-hit optimization can arise from different mechanisms across datasets |
+| Baseline (`none`) role | Stable control for delta computation | Moderate QA accuracy, zero support hits | Necessary anchor for causal comparison |
+| `keyword_expansion` effect | Negative-control degradation pattern | Higher support hits, lower answer accuracy | More retrieval signals do not guarantee better decisions |
+| `rerank_only` effect | Strong positive on primary benchmark | No change vs baseline | Reranking is bounded by candidate recall quality |
+| Evidence completeness | Full retrieval metric set available | Retrieval metrics unavailable (missing GT evidence schema) | External findings are indicative, not fully retrieval-grounded |
+| Reproducibility status | Structured and auditable | Structured but schema-limited | Protocol is strong; ScienceQA labeling is the main gap |
+
+### Limitations and Future Work
+
+**Current Limitations**
+- ScienceQA run lacks GT evidence columns, preventing full retrieval-grounded metric parity.
+- Current ScienceQA comparisons are single-pass macros without repeated-run variance estimates.
+- Cross-domain transfer from biomedical indexing assumptions may underfit science education question styles.
+- Compound profiles (for example, `hyde + rerank`) are not yet fully mapped in the same controlled grid.
+
+**Planned Future Work**
+1. Introduce GT evidence annotations for ScienceQA to enable Precision/Recall/F1/MRR/nDCG parity with the primary benchmark.
+2. Run repeated trials per profile and report mean ± std with confidence intervals.
+3. Extend the ablation matrix with controlled compound settings (`hyde + rerank`, `hyde + hybrid`, `hyde + rerank + hybrid`) after isolated baselines are locked.
+4. Add statistical significance testing for pairwise profile deltas (for example, bootstrap CIs and non-parametric paired tests).
+5. Evaluate robustness under ingestion perturbations (chunk size/overlap sweeps) while holding runtime toggles fixed.
+6. Add calibration analysis linking retrieval support metrics to final answer correctness to quantify support-to-decision conversion efficiency.
 
 ---
 

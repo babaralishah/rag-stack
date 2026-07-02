@@ -106,7 +106,17 @@ def load_or_create_store(dim: int) -> FaissVectorStore:
         return vs
 
     if index_path.exists() and meta_path.exists():
-        vs = FaissVectorStore.load(str(STORE_DIR))
+        loaded_store = FaissVectorStore.load(str(STORE_DIR))
+        if loaded_store.dim != dim:
+            logger.warning(
+                "Persisted FAISS dim (%s) does not match active embedding dim (%s). "
+                "Starting a fresh in-memory index for the active model.",
+                loaded_store.dim,
+                dim,
+            )
+            vs = FaissVectorStore(dim=dim, store_dir=str(STORE_DIR))
+            return vs
+        vs = loaded_store
         return vs
 
     vs = FaissVectorStore(dim=dim, store_dir=str(STORE_DIR))
