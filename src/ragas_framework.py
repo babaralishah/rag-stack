@@ -73,14 +73,25 @@ async def _compute_ragas_async(
         GoogleGenerativeAIEmbeddings,
     )
 
-    llm_model = os.getenv("RAGAS_LLM_MODEL", "gemini-1.5-flash")
-    embedding_model = os.getenv("RAGAS_EMBED_MODEL", "models/text-embedding-004")
+    llm_candidates = [
+        os.getenv("RAGAS_LLM_MODEL", "").strip(),
+        "gemini-2.0-flash",
+        "models/gemini-2.0-flash",
+        "gemini-2.0-flash-lite",
+        "models/gemini-2.0-flash-lite",
+        "gemini-1.5-flash-latest",
+        "models/gemini-1.5-flash-latest",
+        "gemini-1.5-flash",
+        "models/gemini-1.5-flash",
+    ]
+    llm_candidates = [m for m in llm_candidates if m]
 
-    llm = ChatGoogleGenerativeAI(model=llm_model, temperature=0.0)
-    embeddings = GoogleGenerativeAIEmbeddings(model=embedding_model)
-
-    llm_wrapper = LangchainLLMWrapper(llm)
-    embedding_wrapper = LangchainEmbeddingsWrapper(embeddings)
+    embed_candidates = [
+        os.getenv("RAGAS_EMBED_MODEL", "").strip(),
+        "models/text-embedding-004",
+        "text-embedding-004",
+    ]
+    embed_candidates = [m for m in embed_candidates if m]
 
     sample = SingleTurnSample(
         user_input=question,
@@ -88,38 +99,55 @@ async def _compute_ragas_async(
         retrieved_contexts=contexts,
     )
 
-    faithfulness_metric = Faithfulness(llm=llm_wrapper)
-    answer_relevancy_metric = ResponseRelevancy(
-        llm=llm_wrapper,
-        embeddings=embedding_wrapper,
-    )
-    context_precision_metric = ContextPrecision(llm=llm_wrapper)
+    errors: List[str] = []
+    for llm_model in llm_candidates:
+        for embedding_model in embed_candidates:
+            try:
+                llm = ChatGoogleGenerativeAI(model=llm_model, temperature=0.0)
+                embeddings = GoogleGenerativeAIEmbeddings(model=embedding_model)
 
-    faithfulness = await faithfulness_metric.single_turn_ascore(sample)
-    answer_relevancy = await answer_relevancy_metric.single_turn_ascore(sample)
-    context_precision = await context_precision_metric.single_turn_ascore(sample)
+                llm_wrapper = LangchainLLMWrapper(llm)
+                embedding_wrapper = LangchainEmbeddingsWrapper(embeddings)
 
-    numeric_metrics = {
-        "faithfulness": float(faithfulness),
-        "answer_relevancy": float(answer_relevancy),
-        "context_precision": float(context_precision),
-    }
-    numeric_metrics["average_score"] = (
-        numeric_metrics["faithfulness"]
-        + numeric_metrics["answer_relevancy"]
-        + numeric_metrics["context_precision"]
-    ) / 3.0
+                faithfulness_metric = Faithfulness(llm=llm_wrapper)
+                answer_relevancy_metric = ResponseRelevancy(
+                    llm=llm_wrapper,
+                    embeddings=embedding_wrapper,
+                )
+                context_precision_metric = ContextPrecision(llm=llm_wrapper)
 
-    return {
-        "enabled": True,
-        "status": "ok",
-        "provider": "gemini",
-        "llm_model": llm_model,
-        "embedding_model": embedding_model,
-        "metrics": {k: round(v, 4) for k, v in numeric_metrics.items()},
-        "warnings": [],
-        "error": None,
-    }
+                faithfulness = await faithfulness_metric.single_turn_ascore(sample)
+                answer_relevancy = await answer_relevancy_metric.single_turn_ascore(sample)
+                context_precision = await context_precision_metric.single_turn_ascore(sample)
+
+                numeric_metrics = {
+                    "faithfulness": float(faithfulness),
+                    "answer_relevancy": float(answer_relevancy),
+                    "context_precision": float(context_precision),
+                }
+                numeric_metrics["average_score"] = (
+                    numeric_metrics["faithfulness"]
+                    + numeric_metrics["answer_relevancy"]
+                    + numeric_metrics["context_precision"]
+                ) / 3.0
+
+                return {
+                    "enabled": True,
+                    "status": "ok",
+                    "provider": "gemini",
+                    "llm_model": llm_model,
+                    "embedding_model": embedding_model,
+                    "metrics": {k: round(v, 4) for k, v in numeric_metrics.items()},
+                    "warnings": [],
+                    "error": None,
+                }
+            except Exception as exc:
+                errors.append(
+                    f"llm={llm_model}, embed={embedding_model}, error={str(exc)}"
+                )
+                continue
+
+    raise RuntimeError("; ".join(errors[:4]) or "No compatible Gemini model found")
 
 
 def compute_ragas_framework_metrics(
