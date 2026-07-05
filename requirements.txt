@@ -9,6 +9,8 @@ numpy
 python-multipart
 groq
 google-genai
+ragas
+langchain-google-genai>=1.0.0
 rank-bm25
 cachetools
 beautifulsoup4

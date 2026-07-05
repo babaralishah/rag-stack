@@ -533,6 +533,7 @@ if question:
             evaluation = data.get("evaluation", {})
             standard_metrics = data.get("standard_metrics", {})
             rag_metrics = data.get("rag_metrics", {})
+            ragas_framework = data.get("ragas_framework", {})
             system_config = data.get("system_config", {})
 
             # Add assistant message with all metrics and configuration
@@ -544,6 +545,7 @@ if question:
                     "evaluation": evaluation,
                     "standard_metrics": standard_metrics,
                     "rag_metrics": rag_metrics,
+                    "ragas_framework": ragas_framework,
                     "system_config": system_config,
                 }
             )
@@ -598,6 +600,41 @@ for message in st.session_state.chat_history:
                         f"**Label:** {evaluation.get('label', 'unknown').title()}  \\"
                         f"**Warnings:** {', '.join(evaluation.get('warnings', [])) or 'none'}"
                     )
+
+            ragas_framework = message.get("ragas_framework") or {}
+            if ragas_framework:
+                with st.expander("🧪 RAGAS Framework Results", expanded=False):
+                    status = str(ragas_framework.get("status", "unknown")).lower()
+                    enabled = bool(ragas_framework.get("enabled", False))
+
+                    if enabled and status == "ok":
+                        metrics = ragas_framework.get("metrics", {}) or {}
+                        col1, col2, col3 = st.columns(3)
+                        with col1:
+                            if metrics.get("faithfulness") is not None:
+                                st.metric("Faithfulness", f"{metrics.get('faithfulness', 0):.3f}")
+                        with col2:
+                            if metrics.get("answer_relevancy") is not None:
+                                st.metric("Answer Relevancy", f"{metrics.get('answer_relevancy', 0):.3f}")
+                        with col3:
+                            if metrics.get("context_precision") is not None:
+                                st.metric("Context Precision", f"{metrics.get('context_precision', 0):.3f}")
+
+                        if metrics.get("average_score") is not None:
+                            st.metric("Average RAGAS Score", f"{metrics.get('average_score', 0):.3f}")
+
+                        st.caption(
+                            f"Provider: {ragas_framework.get('provider', 'N/A')} | "
+                            f"LLM: {ragas_framework.get('llm_model', 'N/A')} | "
+                            f"Embedding: {ragas_framework.get('embedding_model', 'N/A')}"
+                        )
+                    else:
+                        error_text = ragas_framework.get("error") or "RAGAS framework not available."
+                        st.info(error_text)
+
+                    warnings = ragas_framework.get("warnings") or []
+                    if warnings:
+                        st.caption(f"Warnings: {', '.join(str(w) for w in warnings)}")
 
             # === Standard Evaluation Metrics ===
             standard_metrics = message.get("standard_metrics") or {}

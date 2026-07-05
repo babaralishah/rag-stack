@@ -14,7 +14,7 @@ import json
 from dotenv import load_dotenv
 
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
-from pydantic import BaseModel, HttpUrl
+from pydantic import BaseModel, HttpUrl, Field
 
 from src.cache import (
     get_cache_key,
@@ -45,6 +45,7 @@ from src.vector_store import FaissVectorStore
 from src.rag_pipeline import rag_answer
 from src.evaluator import compute_ragas_metrics
 from src.advanced_metrics import compute_comprehensive_metrics
+from src.ragas_framework import compute_ragas_framework_metrics
 from src.source_loader import (
     fetch_web_text,
     fetch_youtube_transcript,
@@ -258,6 +259,18 @@ class RAGMetrics(BaseModel):
     context_precision: float
 
 
+class RAGASFrameworkMetrics(BaseModel):
+    """Official RAGAS framework metrics computed in isolated mode."""
+    enabled: bool
+    status: str
+    provider: Optional[str] = None
+    llm_model: Optional[str] = None
+    embedding_model: Optional[str] = None
+    metrics: Dict[str, float] = Field(default_factory=dict)
+    warnings: List[str] = Field(default_factory=list)
+    error: Optional[str] = None
+
+
 class SystemConfiguration(BaseModel):
     """System configuration and parameters used for the query"""
     hardware_info: Optional[str] = None
@@ -277,6 +290,7 @@ class QueryResponse(BaseModel):
     evaluation: Optional[EvaluationMetrics] = None
     standard_metrics: Optional[StandardMetrics] = None
     rag_metrics: Optional[RAGMetrics] = None
+    ragas_framework: Optional[RAGASFrameworkMetrics] = None
     system_config: Optional[SystemConfiguration] = None
 
 
@@ -709,6 +723,26 @@ def generate_answer_payload(
         logger.warning(f"Failed to compute comprehensive metrics: {e}")
         standard_metrics = None
         rag_metrics = None
+
+    # === Compute official RAGAS framework metrics in isolated mode ===
+    try:
+        ragas_framework = compute_ragas_framework_metrics(
+            question=question,
+            answer=answer,
+            sources=sources,
+        )
+    except Exception as e:
+        logger.warning(f"Failed to compute RAGAS framework metrics: {e}")
+        ragas_framework = {
+            "enabled": False,
+            "status": "error",
+            "provider": None,
+            "llm_model": None,
+            "embedding_model": None,
+            "metrics": {},
+            "warnings": ["ragas_framework_exception"],
+            "error": str(e),
+        }
     
     # === Capture system configuration ===
     try:
@@ -744,6 +778,7 @@ def generate_answer_payload(
         "evaluation": evaluation,
         "standard_metrics": standard_metrics,
         "rag_metrics": rag_metrics,
+        "ragas_framework": ragas_framework,
         "system_config": system_config,
     }
 
