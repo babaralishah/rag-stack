@@ -445,6 +445,12 @@ with st.sidebar:
         step=1,
     )
 
+    use_ragas_framework = st.checkbox(
+        "Enable RAGAS Framework",
+        value=False,
+        help="Off by default for faster responses. Turn on only when you want official RAGAS evaluation.",
+    )
+
     # ==================== ABLATION STUDY PHASES ====================
     st.divider()
     st.subheader("🧪 Ablation Study Phase")
@@ -516,6 +522,7 @@ if question:
                 "top_k": top_k,  # Use the slider value
                 "use_reranker": use_reranker,  # Send the checkbox value
                 "use_hybrid": use_hybrid,  # Send hybrid search setting
+                "use_ragas_framework": use_ragas_framework,
                 "rewriting_strategy": rewriting_strategy,
                 "phase": phase,  # Send the selected ablation phase
                 "history": [

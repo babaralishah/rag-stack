@@ -200,6 +200,7 @@ class QueryRequest(BaseModel):
     top_k: int = TOP_K
     use_reranker: bool = True
     use_hybrid: bool = True
+    use_ragas_framework: bool = False
     rewriting_strategy: Literal["none", "keyword_expansion", "hyde"] = "hyde"
     phase: Optional[str] = None
     history: Optional[List[ChatMessage]] = None
@@ -724,24 +725,36 @@ def generate_answer_payload(
         standard_metrics = None
         rag_metrics = None
 
-    # === Compute official RAGAS framework metrics in isolated mode ===
-    try:
-        ragas_framework = compute_ragas_framework_metrics(
-            question=question,
-            answer=answer,
-            sources=sources,
-        )
-    except Exception as e:
-        logger.warning(f"Failed to compute RAGAS framework metrics: {e}")
+    # === Compute official RAGAS framework metrics in isolated mode (optional) ===
+    if req.use_ragas_framework:
+        try:
+            ragas_framework = compute_ragas_framework_metrics(
+                question=question,
+                answer=answer,
+                sources=sources,
+            )
+        except Exception as e:
+            logger.warning(f"Failed to compute RAGAS framework metrics: {e}")
+            ragas_framework = {
+                "enabled": False,
+                "status": "error",
+                "provider": None,
+                "llm_model": None,
+                "embedding_model": None,
+                "metrics": {},
+                "warnings": ["ragas_framework_exception"],
+                "error": str(e),
+            }
+    else:
         ragas_framework = {
             "enabled": False,
-            "status": "error",
+            "status": "unavailable",
             "provider": None,
             "llm_model": None,
             "embedding_model": None,
             "metrics": {},
-            "warnings": ["ragas_framework_exception"],
-            "error": str(e),
+            "warnings": ["ragas_disabled_by_user"],
+            "error": "RAGAS framework is turned off in UI settings.",
         }
     
     # === Capture system configuration ===
