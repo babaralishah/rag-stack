@@ -10,10 +10,40 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import sys
+import types
 from typing import Any, Dict, List
 
 
 logger = logging.getLogger("rag")
+
+
+def _ensure_vertexai_compat_module() -> None:
+    """Provide a compatibility module expected by some RAGAS versions.
+
+    Certain RAGAS/langchain combinations import:
+    `langchain_community.chat_models.vertexai`.
+    Newer langchain stacks moved VertexAI integrations into
+    `langchain_google_vertexai`.
+    """
+    try:
+        __import__("langchain_community.chat_models.vertexai")
+        return
+    except Exception:
+        pass
+
+    try:
+        from langchain_google_vertexai import ChatVertexAI  # type: ignore
+
+        vertexai_module = types.ModuleType(
+            "langchain_community.chat_models.vertexai"
+        )
+        vertexai_module.ChatVertexAI = ChatVertexAI
+        sys.modules["langchain_community.chat_models.vertexai"] = vertexai_module
+        logger.info("Applied VertexAI compatibility shim for RAGAS imports")
+    except Exception as exc:
+        # Keep running; compute path will return a structured error later if needed.
+        logger.warning("Could not prepare VertexAI compatibility shim: %s", exc)
 
 
 def _build_contexts(sources: List[Dict[str, Any]]) -> List[str]:
@@ -30,6 +60,8 @@ async def _compute_ragas_async(
     answer: str,
     contexts: List[str],
 ) -> Dict[str, Any]:
+    _ensure_vertexai_compat_module()
+
     # Import inside the function so missing optional dependencies never break
     # backend startup.
     from ragas.dataset_schema import SingleTurnSample
