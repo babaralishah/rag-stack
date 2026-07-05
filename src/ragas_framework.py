@@ -18,6 +18,35 @@ from typing import Any, Dict, List
 logger = logging.getLogger("rag")
 
 
+def _is_quota_error(exc: Exception) -> bool:
+    msg = str(exc).lower()
+    return (
+        "resource_exhausted" in msg
+        or "quota exceeded" in msg
+        or "429" in msg
+    )
+
+
+def _build_chat_model(ChatGoogleGenerativeAI: Any, model_name: str) -> Any:
+    """Create Gemini chat model with retries minimized to avoid long blocking."""
+    try:
+        return ChatGoogleGenerativeAI(
+            model=model_name,
+            temperature=0.0,
+            max_retries=0,
+        )
+    except TypeError:
+        return ChatGoogleGenerativeAI(model=model_name, temperature=0.0)
+
+
+def _build_embedding_model(GoogleGenerativeAIEmbeddings: Any, model_name: str) -> Any:
+    """Create Gemini embedding model with retries minimized to avoid long blocking."""
+    try:
+        return GoogleGenerativeAIEmbeddings(model=model_name, max_retries=0)
+    except TypeError:
+        return GoogleGenerativeAIEmbeddings(model=model_name)
+
+
 def _ensure_vertexai_compat_module() -> None:
     """Provide a compatibility module expected by some RAGAS versions.
 
@@ -100,11 +129,16 @@ async def _compute_ragas_async(
     )
 
     errors: List[str] = []
+    per_attempt_timeout = float(os.getenv("RAGAS_ATTEMPT_TIMEOUT_SECONDS", "15"))
+
     for llm_model in llm_candidates:
         for embedding_model in embed_candidates:
             try:
-                llm = ChatGoogleGenerativeAI(model=llm_model, temperature=0.0)
-                embeddings = GoogleGenerativeAIEmbeddings(model=embedding_model)
+                llm = _build_chat_model(ChatGoogleGenerativeAI, llm_model)
+                embeddings = _build_embedding_model(
+                    GoogleGenerativeAIEmbeddings,
+                    embedding_model,
+                )
 
                 llm_wrapper = LangchainLLMWrapper(llm)
                 embedding_wrapper = LangchainEmbeddingsWrapper(embeddings)
@@ -116,9 +150,18 @@ async def _compute_ragas_async(
                 )
                 context_precision_metric = ContextPrecision(llm=llm_wrapper)
 
-                faithfulness = await faithfulness_metric.single_turn_ascore(sample)
-                answer_relevancy = await answer_relevancy_metric.single_turn_ascore(sample)
-                context_precision = await context_precision_metric.single_turn_ascore(sample)
+                faithfulness = await asyncio.wait_for(
+                    faithfulness_metric.single_turn_ascore(sample),
+                    timeout=per_attempt_timeout,
+                )
+                answer_relevancy = await asyncio.wait_for(
+                    answer_relevancy_metric.single_turn_ascore(sample),
+                    timeout=per_attempt_timeout,
+                )
+                context_precision = await asyncio.wait_for(
+                    context_precision_metric.single_turn_ascore(sample),
+                    timeout=per_attempt_timeout,
+                )
 
                 numeric_metrics = {
                     "faithfulness": float(faithfulness),
@@ -142,6 +185,8 @@ async def _compute_ragas_async(
                     "error": None,
                 }
             except Exception as exc:
+                if _is_quota_error(exc):
+                    raise RuntimeError(f"quota_exhausted: {exc}")
                 errors.append(
                     f"llm={llm_model}, embed={embedding_model}, error={str(exc)}"
                 )
@@ -160,6 +205,19 @@ def compute_ragas_framework_metrics(
     This function never raises. If RAGAS cannot run, it returns a structured
     unavailable/error payload so existing backend behavior remains unchanged.
     """
+    ragas_enabled = os.getenv("RAGAS_ENABLED", "true").strip().lower()
+    if ragas_enabled in {"0", "false", "no", "off"}:
+        return {
+            "enabled": False,
+            "status": "unavailable",
+            "provider": None,
+            "llm_model": None,
+            "embedding_model": None,
+            "metrics": {},
+            "warnings": ["ragas_disabled"],
+            "error": "RAGAS framework evaluation is disabled by configuration.",
+        }
+
     if not question or not answer:
         return {
             "enabled": False,
@@ -222,6 +280,17 @@ def compute_ragas_framework_metrics(
                 "error": str(err),
             }
     except Exception as err:
+        if _is_quota_error(err):
+            return {
+                "enabled": False,
+                "status": "unavailable",
+                "provider": "gemini",
+                "llm_model": None,
+                "embedding_model": None,
+                "metrics": {},
+                "warnings": ["ragas_quota_exhausted"],
+                "error": "Gemini quota exhausted for RAGAS evaluation. Core RAG answer is still available.",
+            }
         logger.warning("RAGAS framework evaluation failed: %s", err)
         return {
             "enabled": False,
