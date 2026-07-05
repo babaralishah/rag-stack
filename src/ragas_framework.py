@@ -104,10 +104,19 @@ async def _compute_ragas_async(
 
     llm_candidates = [
         os.getenv("RAGAS_LLM_MODEL", "").strip(),
-        "gemini-2.0-flash",
-        "models/gemini-2.0-flash",
+        # Preferred ordered chain (user requested):
+        # 1) Gemini 2.0 Flash-Lite
+        # 2) Gemini 3.1 Flash-Lite
+        # 3) Gemini 3 Flash
         "gemini-2.0-flash-lite",
         "models/gemini-2.0-flash-lite",
+        "gemini-3.1-flash-lite",
+        "models/gemini-3.1-flash-lite",
+        "gemini-3-flash",
+        "models/gemini-3-flash",
+        # Extra compatibility fallbacks
+        "gemini-2.0-flash",
+        "models/gemini-2.0-flash",
         "gemini-1.5-flash-latest",
         "models/gemini-1.5-flash-latest",
         "gemini-1.5-flash",
@@ -129,6 +138,7 @@ async def _compute_ragas_async(
     )
 
     errors: List[str] = []
+    quota_errors: List[str] = []
     per_attempt_timeout = float(os.getenv("RAGAS_ATTEMPT_TIMEOUT_SECONDS", "15"))
 
     for llm_model in llm_candidates:
@@ -186,13 +196,19 @@ async def _compute_ragas_async(
                 }
             except Exception as exc:
                 if _is_quota_error(exc):
-                    raise RuntimeError(f"quota_exhausted: {exc}")
+                    quota_errors.append(
+                        f"llm={llm_model}, embed={embedding_model}, error={str(exc)}"
+                    )
+                    continue
                 errors.append(
                     f"llm={llm_model}, embed={embedding_model}, error={str(exc)}"
                 )
                 continue
 
-    raise RuntimeError("; ".join(errors[:4]) or "No compatible Gemini model found")
+    if quota_errors and not errors:
+        raise Exception("quota_exhausted: " + "; ".join(quota_errors[:3]))
+
+    raise Exception("; ".join((errors + quota_errors)[:4]) or "No compatible Gemini model found")
 
 
 def compute_ragas_framework_metrics(
@@ -257,7 +273,32 @@ def compute_ragas_framework_metrics(
 
     try:
         return asyncio.run(_compute_ragas_async(question, answer, contexts))
-    except RuntimeError:
+    except RuntimeError as err:
+        err_msg = str(err)
+        if "asyncio.run() cannot be called from a running event loop" not in err_msg:
+            if _is_quota_error(err):
+                return {
+                    "enabled": False,
+                    "status": "unavailable",
+                    "provider": "gemini",
+                    "llm_model": None,
+                    "embedding_model": None,
+                    "metrics": {},
+                    "warnings": ["ragas_quota_exhausted"],
+                    "error": "Gemini quota exhausted for RAGAS evaluation. Core RAG answer is still available.",
+                }
+            logger.warning("RAGAS framework evaluation failed: %s", err)
+            return {
+                "enabled": False,
+                "status": "error",
+                "provider": "gemini",
+                "llm_model": None,
+                "embedding_model": None,
+                "metrics": {},
+                "warnings": ["ragas_dependency_or_provider_error"],
+                "error": str(err),
+            }
+
         # Fallback path for environments that already have an event loop.
         try:
             loop = asyncio.new_event_loop()
@@ -267,8 +308,19 @@ def compute_ragas_framework_metrics(
                 )
             finally:
                 loop.close()
-        except Exception as err:
-            logger.warning("RAGAS loop fallback failed: %s", err)
+        except Exception as inner_err:
+            if _is_quota_error(inner_err):
+                return {
+                    "enabled": False,
+                    "status": "unavailable",
+                    "provider": "gemini",
+                    "llm_model": None,
+                    "embedding_model": None,
+                    "metrics": {},
+                    "warnings": ["ragas_quota_exhausted"],
+                    "error": "Gemini quota exhausted for RAGAS evaluation. Core RAG answer is still available.",
+                }
+            logger.warning("RAGAS loop fallback failed: %s", inner_err)
             return {
                 "enabled": False,
                 "status": "error",
@@ -277,7 +329,7 @@ def compute_ragas_framework_metrics(
                 "embedding_model": None,
                 "metrics": {},
                 "warnings": ["ragas_runtime_error"],
-                "error": str(err),
+                "error": str(inner_err),
             }
     except Exception as err:
         if _is_quota_error(err):
