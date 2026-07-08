@@ -1,11 +1,13 @@
 ﻿import hashlib
 import os
+import re
 import streamlit as st
 import requests
 import threading
 import time
 import logging
-from typing import Dict, Any
+from typing import Dict, Any, List, Tuple
+from urllib.parse import urlparse
 
 from src.api import (
     QueryRequest,
@@ -18,6 +20,12 @@ from src.api import (
 
 logger = logging.getLogger("rag")
 
+NO_SOURCE_MESSAGE_MARKERS = (
+    "no documents indexed yet",
+    "upload at least one source first",
+    "no indexed documents found",
+)
+
 
 def format_api_error(exc: Exception) -> str:
     if isinstance(exc, requests.exceptions.HTTPError) and exc.response is not None:
@@ -27,6 +35,124 @@ def format_api_error(exc: Exception) -> str:
         except Exception:
             return exc.response.text
     return str(exc)
+
+
+def _extract_topic_hints(raw_text: str, max_hints: int = 3) -> List[str]:
+    tokens = re.split(r"[^a-zA-Z0-9]+", raw_text.lower())
+    stop_words = {
+        "the",
+        "and",
+        "with",
+        "from",
+        "this",
+        "that",
+        "your",
+        "about",
+        "page",
+        "index",
+        "data",
+        "text",
+        "source",
+        "file",
+        "table",
+        "upload",
+        "ingest",
+        "transcript",
+    }
+    hints: List[str] = []
+    seen = set()
+
+    for token in tokens:
+        if len(token) < 4 or token in stop_words or token.isdigit() or token in seen:
+            continue
+        seen.add(token)
+        hints.append(token)
+        if len(hints) >= max_hints:
+            break
+
+    return hints
+
+
+def _build_ingestion_confirmation(
+    source_type: str,
+    source_name: str,
+    response_data: Dict[str, Any],
+) -> Dict[str, Any]:
+    chunks_added = int(response_data.get("chunks_added") or 0)
+    status = str(response_data.get("status") or "").strip().lower() or "ingested"
+
+    source_label = source_name
+    key_content_label = "Content"
+    key_content_value = "Indexed and ready"
+
+    if source_type == "sqlite":
+        source_label = response_data.get("source") or source_name
+        table_name = source_label.split(":", 1)[1] if ":" in source_label else source_label
+        key_content_label = "Table"
+        key_content_value = table_name
+    elif source_type in {"web", "youtube"}:
+        source_label = response_data.get("source") or source_name
+        parsed = urlparse(source_label)
+        key_content_label = "Topic hints"
+        hint_seed = f"{parsed.netloc} {parsed.path}"
+        hints = _extract_topic_hints(hint_seed)
+        key_content_value = ", ".join(hints) if hints else (parsed.netloc or "web content")
+    else:
+        source_label = response_data.get("file") or response_data.get("source") or source_name
+        key_content_label = "Topic hints"
+        hints = _extract_topic_hints(source_label)
+        key_content_value = ", ".join(hints) if hints else "document content"
+
+    return {
+        "status": status,
+        "source_type": source_type,
+        "source_label": source_label,
+        "chunks_added": chunks_added,
+        "key_content_label": key_content_label,
+        "key_content_value": key_content_value,
+        "reason": response_data.get("reason", ""),
+    }
+
+
+def _is_no_source_assistant_message(message: Dict[str, Any]) -> bool:
+    if message.get("role") != "assistant":
+        return False
+    content = str(message.get("content") or "").strip().lower()
+    return any(marker in content for marker in NO_SOURCE_MESSAGE_MARKERS)
+
+
+def _prune_pre_source_chat_noise(chat_history: List[Dict[str, Any]]) -> Tuple[List[Dict[str, Any]], int]:
+    pruned: List[Dict[str, Any]] = []
+    removed_count = 0
+
+    for message in chat_history:
+        if _is_no_source_assistant_message(message):
+            removed_count += 1
+            if pruned and pruned[-1].get("role") == "user":
+                pruned.pop()
+                removed_count += 1
+            continue
+        pruned.append(message)
+
+    return pruned, removed_count
+
+
+def _finalize_successful_ingestion(
+    source_type: str,
+    source_name: str,
+    response_data: Dict[str, Any],
+) -> None:
+    st.session_state["knowledge_base_active"] = True
+    st.session_state["last_ingestion_confirmation"] = _build_ingestion_confirmation(
+        source_type=source_type,
+        source_name=source_name,
+        response_data=response_data,
+    )
+
+    current_history = st.session_state.get("chat_history", [])
+    cleaned_history, removed_count = _prune_pre_source_chat_noise(current_history)
+    st.session_state["chat_history"] = cleaned_history
+    st.session_state["pruned_no_source_messages"] = removed_count
 
 
 # --------------------- Config ---------------------
@@ -128,6 +254,19 @@ if is_eval_mode:
     #     st.json({"status": "error", "message": "Missing 'query' parameter."})
     st.stop()
 
+
+if "chat_history" not in st.session_state:
+    st.session_state.chat_history = []
+
+if "knowledge_base_active" not in st.session_state:
+    st.session_state.knowledge_base_active = False
+
+if "last_ingestion_confirmation" not in st.session_state:
+    st.session_state.last_ingestion_confirmation = None
+
+if "pruned_no_source_messages" not in st.session_state:
+    st.session_state.pruned_no_source_messages = 0
+
     try:
         store = load_search_store()
         if store is None:
@@ -214,6 +353,12 @@ with st.sidebar:
                         f"{API_BASE_URL}/upload", files=files, timeout=180
                     )
                     response.raise_for_status()
+                    result = response.json()
+                    _finalize_successful_ingestion(
+                        source_type="file",
+                        source_name=uploaded_file.name,
+                        response_data=result,
+                    )
                     st.success(f"✅ **{uploaded_file.name}** uploaded successfully!")
                     st.rerun()
                 except Exception as e:
@@ -229,6 +374,11 @@ with st.sidebar:
                     f"{API_BASE_URL}/ingest/url", data={"url": web_url}, timeout=180
                 )
                 response.raise_for_status()
+                _finalize_successful_ingestion(
+                    source_type="web",
+                    source_name=web_url,
+                    response_data=response.json(),
+                )
                 st.success("✅ Web source ingested successfully!")
                 st.rerun()
             except Exception as e:
@@ -245,6 +395,11 @@ with st.sidebar:
                     timeout=180,
                 )
                 response.raise_for_status()
+                _finalize_successful_ingestion(
+                    source_type="youtube",
+                    source_name=youtube_url,
+                    response_data=response.json(),
+                )
                 st.success("✅ YouTube transcript ingested successfully!")
                 st.rerun()
             except Exception as e:
@@ -274,6 +429,11 @@ with st.sidebar:
                     timeout=180,
                 )
                 response.raise_for_status()
+                _finalize_successful_ingestion(
+                    source_type="manual_text",
+                    source_name=manual_source_name,
+                    response_data=response.json(),
+                )
                 st.success("✅ Manual transcript ingested successfully!")
                 st.rerun()
             except Exception as e:
@@ -362,6 +522,11 @@ with st.sidebar:
                     f"{API_BASE_URL}/ingest/sqlite", files=files, data=data, timeout=180
                 )
                 response.raise_for_status()
+                _finalize_successful_ingestion(
+                    source_type="sqlite",
+                    source_name=f"{sqlite_file.name}:{sqlite_table}",
+                    response_data=response.json(),
+                )
                 st.success("✅ SQLite table ingested successfully!")
                 st.rerun()
             except Exception as e:
@@ -502,9 +667,36 @@ st.caption(
     "Ask questions about PDFs, web pages, SQLite tables, and video transcripts • Powered by Groq + FAISS"
 )
 
-# Initialize session state
-if "chat_history" not in st.session_state:
-    st.session_state.chat_history = []
+confirmation = st.session_state.get("last_ingestion_confirmation")
+if confirmation:
+    status = confirmation.get("status", "ingested")
+    is_newly_ingested = status == "ingested"
+    label = "✅ Source Active" if is_newly_ingested else "✅ Source Already Active"
+    if status == "skipped":
+        reason = confirmation.get("reason") or "Already indexed"
+        st.info(f"{label}: {reason}")
+    else:
+        st.success(label)
+
+    c1, c2, c3 = st.columns(3)
+    with c1:
+        st.caption("Source type")
+        st.write(str(confirmation.get("source_type", "unknown")).replace("_", " ").title())
+    with c2:
+        st.caption("Key content")
+        st.write(f"{confirmation.get('key_content_label', 'Content')}: {confirmation.get('key_content_value', 'Indexed')}")
+    with c3:
+        st.caption("Chunks indexed")
+        st.write(str(confirmation.get("chunks_added", 0)))
+
+    st.caption(f"Active source: {confirmation.get('source_label', 'N/A')}")
+    st.caption("Assistant is ready to answer grounded questions from this source.")
+
+    pruned_count = int(st.session_state.get("pruned_no_source_messages", 0))
+    if pruned_count > 0:
+        st.caption(
+            f"Cleaned {pruned_count} pre-source chat messages so the conversation stays focused on indexed sources."
+        )
 
 # Chat Input
 question = st.chat_input(
