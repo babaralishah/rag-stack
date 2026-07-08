@@ -149,6 +149,45 @@ def compute_source_hash(source_value: str) -> str:
     return hashlib.sha256(source_value.encode("utf-8")).hexdigest()
 
 
+def _extract_content_signals(
+    pages: List[Dict[str, Any]],
+    source_type: str,
+    source_file: str,
+) -> Dict[str, Any]:
+    """Build lightweight source signals for UI confirmation cards."""
+    first_meta = (pages[0] or {}).get("metadata", {}) if pages else {}
+    signals: Dict[str, Any] = {
+        "source_type": source_type,
+        "source_file": source_file,
+    }
+
+    if source_type == "sqlite":
+        table_name = first_meta.get("table_name")
+        columns = first_meta.get("columns") or []
+        signals.update(
+            {
+                "table_name": table_name,
+                "row_count": len(pages),
+                "column_count": len(columns),
+                "sample_columns": columns[:5],
+            }
+        )
+    elif source_type == "web":
+        title = first_meta.get("title")
+        if title:
+            signals["title"] = title
+    elif source_type == "youtube":
+        video_id = first_meta.get("video_id")
+        if video_id:
+            signals["video_id"] = video_id
+    else:
+        file_extension = first_meta.get("file_extension")
+        if file_extension:
+            signals["file_extension"] = file_extension
+
+    return signals
+
+
 # web page URLs, YouTube transcripts, and SQL tables.
 def ingest_pages(
     pages: List[Dict[str, Any]],
@@ -187,7 +226,16 @@ def ingest_pages(
     store.save()
     clear_all_caches()
 
-    return {"status": "ingested", "source": source_file, "chunks_added": len(texts)}
+    return {
+        "status": "ingested",
+        "source": source_file,
+        "chunks_added": len(texts),
+        "content_signals": _extract_content_signals(
+            pages=pages,
+            source_type=source_type,
+            source_file=source_file,
+        ),
+    }
 
 
 class ChatMessage(BaseModel):
@@ -416,7 +464,18 @@ def ingest_upload_pages(
     store.save()
     clear_all_caches()
 
-    return {"status": "ingested", "file": filename, "chunks_added": len(texts)}
+    source_type = "pdf" if file_ext == ".pdf" else "upload"
+    return {
+        "status": "ingested",
+        "file": filename,
+        "chunks_added": len(texts),
+        "content_signals": {
+            "source_type": source_type,
+            "source_file": filename,
+            "file_extension": file_ext,
+            "page_count": len(pages),
+        },
+    }
 
 
 @app.post("/upload")

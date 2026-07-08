@@ -9,14 +9,7 @@ import logging
 from typing import Dict, Any, List, Tuple
 from urllib.parse import urlparse
 
-from src.api import (
-    QueryRequest,
-    get_query_settings,
-    load_search_store,
-    rewrite_and_embed_query,
-    search_documents,
-    app as fastapi_app,  # Import the FastAPI app instance
-)
+from src.api import app as fastapi_app  # Import the FastAPI app instance
 
 logger = logging.getLogger("rag")
 
@@ -80,28 +73,53 @@ def _build_ingestion_confirmation(
 ) -> Dict[str, Any]:
     chunks_added = int(response_data.get("chunks_added") or 0)
     status = str(response_data.get("status") or "").strip().lower() or "ingested"
+    content_signals = response_data.get("content_signals") or {}
 
     source_label = source_name
     key_content_label = "Content"
     key_content_value = "Indexed and ready"
 
+    if content_signals.get("source_file"):
+        source_label = str(content_signals.get("source_file"))
+
     if source_type == "sqlite":
-        source_label = response_data.get("source") or source_name
-        table_name = source_label.split(":", 1)[1] if ":" in source_label else source_label
+        source_label = response_data.get("source") or source_label or source_name
+        table_name = content_signals.get("table_name")
+        if not table_name:
+            table_name = source_label.split(":", 1)[1] if ":" in source_label else source_label
+        row_count = content_signals.get("row_count")
         key_content_label = "Table"
-        key_content_value = table_name
+        if isinstance(row_count, int) and row_count > 0:
+            key_content_value = f"{table_name} ({row_count} rows)"
+        else:
+            key_content_value = str(table_name)
     elif source_type in {"web", "youtube"}:
-        source_label = response_data.get("source") or source_name
-        parsed = urlparse(source_label)
-        key_content_label = "Topic hints"
-        hint_seed = f"{parsed.netloc} {parsed.path}"
-        hints = _extract_topic_hints(hint_seed)
-        key_content_value = ", ".join(hints) if hints else (parsed.netloc or "web content")
+        source_label = response_data.get("source") or source_label or source_name
+        if content_signals.get("title"):
+            key_content_label = "Title"
+            key_content_value = str(content_signals.get("title"))
+        elif content_signals.get("video_id"):
+            key_content_label = "Video"
+            key_content_value = f"YouTube ID: {content_signals.get('video_id')}"
+        else:
+            key_content_label = "Topic hints"
+            parsed = urlparse(source_label)
+            hint_seed = f"{parsed.netloc} {parsed.path}"
+            hints = _extract_topic_hints(hint_seed)
+            key_content_value = ", ".join(hints) if hints else (parsed.netloc or "web content")
     else:
-        source_label = response_data.get("file") or response_data.get("source") or source_name
-        key_content_label = "Topic hints"
-        hints = _extract_topic_hints(source_label)
-        key_content_value = ", ".join(hints) if hints else "document content"
+        source_label = response_data.get("file") or response_data.get("source") or source_label or source_name
+        if content_signals.get("file_extension"):
+            key_content_label = "File type"
+            key_content_value = str(content_signals.get("file_extension"))
+        else:
+            key_content_label = "Topic hints"
+            hints = _extract_topic_hints(source_label)
+            key_content_value = ", ".join(hints) if hints else "document content"
+
+    page_count = content_signals.get("page_count")
+    if isinstance(page_count, int) and page_count > 0 and source_type == "file":
+        key_content_value = f"{key_content_value} ({page_count} pages)"
 
     return {
         "status": status,
@@ -121,20 +139,24 @@ def _is_no_source_assistant_message(message: Dict[str, Any]) -> bool:
     return any(marker in content for marker in NO_SOURCE_MESSAGE_MARKERS)
 
 
-def _prune_pre_source_chat_noise(chat_history: List[Dict[str, Any]]) -> Tuple[List[Dict[str, Any]], int]:
-    pruned: List[Dict[str, Any]] = []
-    removed_count = 0
+def _archive_pre_source_chat_noise(
+    chat_history: List[Dict[str, Any]],
+) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]], int]:
+    kept: List[Dict[str, Any]] = []
+    archived: List[Dict[str, Any]] = []
+    moved_count = 0
 
     for message in chat_history:
         if _is_no_source_assistant_message(message):
-            removed_count += 1
-            if pruned and pruned[-1].get("role") == "user":
-                pruned.pop()
-                removed_count += 1
+            moved_count += 1
+            if kept and kept[-1].get("role") == "user":
+                archived.append(kept.pop())
+                moved_count += 1
+            archived.append(message)
             continue
-        pruned.append(message)
+        kept.append(message)
 
-    return pruned, removed_count
+    return kept, archived, moved_count
 
 
 def _finalize_successful_ingestion(
@@ -150,9 +172,12 @@ def _finalize_successful_ingestion(
     )
 
     current_history = st.session_state.get("chat_history", [])
-    cleaned_history, removed_count = _prune_pre_source_chat_noise(current_history)
-    st.session_state["chat_history"] = cleaned_history
-    st.session_state["pruned_no_source_messages"] = removed_count
+    active_history, archived_history, moved_count = _archive_pre_source_chat_noise(current_history)
+    st.session_state["chat_history"] = active_history
+
+    existing_archive = st.session_state.get("pre_source_chat_archive", [])
+    st.session_state["pre_source_chat_archive"] = existing_archive + archived_history
+    st.session_state["pruned_no_source_messages"] = moved_count
 
 
 # --------------------- Config ---------------------
@@ -267,65 +292,8 @@ if "last_ingestion_confirmation" not in st.session_state:
 if "pruned_no_source_messages" not in st.session_state:
     st.session_state.pruned_no_source_messages = 0
 
-    try:
-        store = load_search_store()
-        if store is None:
-            st.json(
-                {
-                    "status": "error",
-                    "message": "No indexed documents found. Upload or ingest sources first.",
-                }
-            )
-            st.stop()
-
-        req = QueryRequest(
-            question=eval_question,
-            top_k=eval_top_k,
-            use_reranker=eval_use_reranker,
-            use_hybrid=eval_use_hybrid,
-            rewriting_strategy=eval_rewriting_strategy,
-            phase=eval_phase,
-        )
-        flags = get_query_settings(req)
-
-        query_text, query_vector = rewrite_and_embed_query(
-            eval_question,
-            use_query_rewriter=flags.get("use_query_rewriter", True),
-            history=None,
-            rewriting_strategy=eval_rewriting_strategy,
-        )
-
-        retrieved = search_documents(
-            store,
-            query_text,
-            query_vector,
-            top_k=eval_top_k,
-            use_hybrid=flags["use_hybrid"],
-            use_reranker=flags["use_reranker"],
-        )
-
-        retrieved_context_keys = []
-        for doc in retrieved:
-            meta = doc.get("metadata") or {}
-            doc_id = (
-                meta.get("doc_id")
-                or meta.get("source_file")
-                or meta.get("file")
-                or doc.get("id")
-            )
-            if doc_id:
-                retrieved_context_keys.append(str(doc_id))
-
-        st.json(
-            {
-                "status": "success",
-                "retrieved_context_keys": retrieved_context_keys,
-            }
-        )
-    except Exception as e:
-        st.json({"status": "error", "message": str(e)})
-
-    st.stop()
+if "pre_source_chat_archive" not in st.session_state:
+    st.session_state.pre_source_chat_archive = []
 
 # --------------------- Sidebar ---------------------
 with st.sidebar:
@@ -697,6 +665,15 @@ if confirmation:
         st.caption(
             f"Cleaned {pruned_count} pre-source chat messages so the conversation stays focused on indexed sources."
         )
+
+archive = st.session_state.get("pre_source_chat_archive", [])
+if archive:
+    with st.expander("🧹 Hidden pre-source messages", expanded=False):
+        st.caption("These messages were generated before any source was indexed.")
+        for msg in archive:
+            role = msg.get("role", "assistant")
+            with st.chat_message(role):
+                st.markdown(str(msg.get("content", "")))
 
 # Chat Input
 question = st.chat_input(
