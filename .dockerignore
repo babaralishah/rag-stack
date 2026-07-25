@@ -1,0 +1,11 @@
+.venv/
+__pycache__/
+*.pyc
+.git/
+.vscode/
+rag.log
+storage/
+data/uploads/
+docs/demo.gif
+requirements-lock.txt
+Multi-DataSource-RAG-Guide.pdf

@@ -1,0 +1,49 @@
+# Virtual env
+.venv/
+.env
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Logs
+rag.log
+
+# Vector DB
+storage/
+
+# Uploaded files
+data/uploads/
+
+# VSCode
+.vscode/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+storage/
+data/uploads/
+rag.log
+
+
+script.py
+Enterprise_Corporate_Policies_Manual.pdf
+data source.docx
+data source.pdf
+Evaluation.xlsx
+Enterprise_Corporate_Policies_Manual.pdf
+
+# Extras
+DEBUGGING_GUIDE.md
+INTERVIEW_SUMMARY.md
+PROJECT_ARCHITECTURE.md
+PROMPT.md
+QUESTIONAIRE.md
+
+Multi-DataSource-RAG-Guide.pdf
+
+research_log.jsonl
+pip-install.log

@@ -1,0 +1,556 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Crypto Scalping Research Dashboard</title>
+  <style>
+    :root {
+      --bg: #0a0f16;
+      --bg-2: #0f1722;
+      --card: #111a26;
+      --card-2: #162233;
+      --text: #dce7f5;
+      --muted: #7f8ea3;
+      --accent: #4dc4ff;
+      --accent-2: #23d3a3;
+      --warn: #f2c14e;
+      --danger: #ff6b6b;
+      --support: #18c27b;
+      --resistance: #ff7a59;
+      --border: #263449;
+      --mono: "Cascadia Mono", "Consolas", "Menlo", monospace;
+      --sans: "Segoe UI", "Inter", sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: radial-gradient(1000px 420px at 10% -5%, #143046 0%, transparent 55%),
+                  radial-gradient(900px 380px at 100% 0%, #1a2d40 0%, transparent 58%),
+                  var(--bg);
+      color: var(--text);
+      font-family: var(--sans);
+    }
+
+    .container {
+      width: min(1280px, 96vw);
+      margin: 1.1rem auto 2rem;
+    }
+
+    .hero {
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      background: linear-gradient(160deg, #0f1b2c 0%, #101825 55%, #0e1722 100%);
+      padding: 1rem 1.2rem;
+      box-shadow: 0 16px 40px rgba(0, 0, 0, 0.32);
+    }
+
+    .eyebrow { color: #9db6d6; text-transform: uppercase; letter-spacing: 0.11em; font-size: 0.76rem; }
+    h1 { margin: 0.25rem 0 0.3rem; font-size: 1.7rem; }
+    .subtitle { color: #b9cde6; font-size: 0.95rem; }
+
+    .disclaimer {
+      position: sticky;
+      top: 0;
+      margin-top: 0.8rem;
+      z-index: 100;
+      border: 1px solid #564116;
+      background: linear-gradient(180deg, #2d2411, #221b0d);
+      color: #f8e5a8;
+      border-radius: 12px;
+      padding: 0.62rem 0.8rem;
+      font-size: 0.92rem;
+    }
+
+    .tabs { display: flex; gap: 0.5rem; margin-top: 1rem; }
+    .tab-btn {
+      border: 1px solid var(--border);
+      background: #101927;
+      color: var(--text);
+      border-radius: 999px;
+      padding: 0.52rem 0.95rem;
+      cursor: pointer;
+      font-weight: 600;
+    }
+    .tab-btn.active { background: #16324a; border-color: #2f668f; color: #d5f0ff; }
+
+    .panel { display: none; margin-top: 0.85rem; }
+    .panel.active { display: block; }
+
+    .card {
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      background: linear-gradient(180deg, var(--card), var(--card-2));
+      box-shadow: 0 10px 22px rgba(0, 0, 0, 0.22);
+      padding: 0.9rem;
+      margin-bottom: 0.8rem;
+    }
+
+    .card h3 { margin: 0 0 0.6rem; font-size: 1rem; color: #cfe8ff; }
+    .row { display: flex; gap: 0.7rem; flex-wrap: wrap; align-items: center; }
+    .mono { font-family: var(--mono); }
+
+    input, button, select {
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      color: var(--text);
+      background: #0f1825;
+      padding: 0.55rem 0.7rem;
+      font-family: var(--sans);
+    }
+    input { min-width: 220px; }
+    button.primary { background: #1c4160; border-color: #2d6d9a; cursor: pointer; }
+    button.primary:hover { filter: brightness(1.06); }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-family: var(--mono);
+      font-size: 0.83rem;
+    }
+    th, td { border-bottom: 1px solid #24364a; padding: 0.48rem 0.38rem; text-align: left; }
+    th { color: #a9c4de; font-weight: 600; }
+    tbody tr:hover { background: rgba(80, 137, 179, 0.11); }
+
+    .badge {
+      display: inline-block;
+      border: 1px solid #6f5120;
+      color: #ffd892;
+      border-radius: 999px;
+      font-size: 0.67rem;
+      padding: 0.13rem 0.42rem;
+      margin-left: 0.35rem;
+      vertical-align: middle;
+      background: rgba(255, 176, 72, 0.12);
+    }
+
+    .muted { color: var(--muted); }
+    .na { color: #8e98a7; font-style: italic; }
+    .pill {
+      display: inline-block;
+      border: 1px solid #3f526d;
+      border-radius: 999px;
+      padding: 0.13rem 0.44rem;
+      font-size: 0.72rem;
+      color: #c5d8ee;
+      margin-right: 0.3rem;
+      margin-bottom: 0.3rem;
+      font-family: var(--mono);
+    }
+
+    .llm-box {
+      white-space: pre-wrap;
+      line-height: 1.48;
+      font-size: 0.93rem;
+      background: #0c141f;
+      border: 1px solid #233347;
+      border-radius: 12px;
+      padding: 0.8rem;
+    }
+
+    details {
+      border: 1px solid #2a3e54;
+      border-radius: 10px;
+      padding: 0.55rem 0.65rem;
+      background: #0e1825;
+    }
+    summary { cursor: pointer; color: #b4d8fb; }
+
+    .grid { display: grid; grid-template-columns: repeat(4, minmax(160px, 1fr)); gap: 0.55rem; }
+    .metric {
+      border: 1px solid #263a4f;
+      border-radius: 10px;
+      padding: 0.55rem;
+      background: #0e1622;
+      min-height: 68px;
+    }
+    .metric .k { color: #8ea8c4; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.06em; }
+    .metric .v { margin-top: 0.28rem; font-family: var(--mono); font-size: 0.91rem; }
+
+    .tf-grid { display: grid; grid-template-columns: repeat(3, minmax(180px, 1fr)); gap: 0.55rem; }
+    .tf-card {
+      border: 1px solid #2b3f54;
+      border-radius: 11px;
+      padding: 0.6rem;
+      background: #0d1622;
+      font-family: var(--mono);
+      font-size: 0.82rem;
+    }
+    .tf-title { color: #bde0ff; margin-bottom: 0.35rem; font-family: var(--sans); }
+
+    .sr-wrap {
+      border: 1px dashed #375370;
+      border-radius: 12px;
+      padding: 0.7rem;
+      background: #0b141f;
+      font-family: var(--mono);
+      font-size: 0.84rem;
+    }
+    .sr-line { margin: 0.26rem 0; }
+    .support { color: var(--support); }
+    .resistance { color: var(--resistance); }
+    .price-marker { color: #8ed0ff; font-weight: 700; }
+
+    .section-grid { display: grid; grid-template-columns: 1fr 1.2fr; gap: 0.7rem; }
+
+    .error {
+      border: 1px solid #6d2f31;
+      background: #2a1517;
+      color: #ffcbcb;
+      border-radius: 10px;
+      padding: 0.5rem 0.65rem;
+      margin-bottom: 0.6rem;
+      font-size: 0.9rem;
+    }
+
+    @media (max-width: 1000px) {
+      .grid { grid-template-columns: repeat(2, minmax(160px, 1fr)); }
+      .tf-grid { grid-template-columns: repeat(2, minmax(180px, 1fr)); }
+      .section-grid { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 700px) {
+      .grid, .tf-grid { grid-template-columns: 1fr; }
+      th:nth-child(8), td:nth-child(8), th:nth-child(9), td:nth-child(9) { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header class="hero">
+      <div class="eyebrow">Research Dashboard</div>
+      <h1>📊 Crypto Scalping Research Dashboard</h1>
+      <div class="subtitle">Real-time scanning and multi-timeframe decision support powered by your free Groq/Gemini stack.</div>
+    </header>
+
+    <div class="disclaimer">⚠️ This tool produces research summaries for human review. It does not place trades and is not financial advice.</div>
+
+    <div class="tabs">
+      <button class="tab-btn active" data-tab="scan">Market Scanner</button>
+      <button class="tab-btn" data-tab="deep">Coin Deep-Dive</button>
+    </div>
+
+    <section id="tab-scan" class="panel active">
+      <div class="card">
+        <div class="row">
+          <label for="topNSelect" class="muted">Top-N</label>
+          <select id="topNSelect" aria-label="Top N selector">
+            <option value="5">5</option>
+            <option value="10" selected>10</option>
+            <option value="15">15</option>
+            <option value="20">20</option>
+          </select>
+          <label for="scopeSelect" class="muted">Scope</label>
+          <select id="scopeSelect" aria-label="Asset scope selector">
+            <option value="meme_high_volatility" selected>Meme / High-Volatility</option>
+            <option value="all">All Assets</option>
+          </select>
+          <button id="scanBtn" class="primary">Run Real-Time Market Scan</button>
+          <span id="scanStatus" class="muted">Idle</span>
+        </div>
+        <div id="scanMessage" class="muted" style="margin-top:0.5rem;"></div>
+      </div>
+      <div id="scanError"></div>
+      <div class="card">
+        <h3>Ranked Candidates</h3>
+        <div style="overflow:auto;">
+          <table id="scanTable">
+            <thead>
+              <tr>
+                <th>Rank</th><th>Symbol</th><th>Score</th><th>Price</th><th>Today Vol</th><th>7d Avg Vol</th><th>Spike Ratio</th><th>24h Range%</th><th>Direction</th><th>Spread%</th><th>Depth Notional</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="card">
+        <h3>LLM Scanner Analysis</h3>
+        <div id="scanSummary" class="llm-box muted">Run a scan to generate summary.</div>
+      </div>
+      <div class="card">
+        <details>
+          <summary>Scoring Formula</summary>
+          <div id="formula" class="mono" style="margin-top:0.6rem;"></div>
+        </details>
+      </div>
+    </section>
+
+    <section id="tab-deep" class="panel">
+      <div class="card">
+        <div class="row">
+          <input id="symbolInput" type="text" value="PEPE" placeholder="Coin symbol or name" />
+          <button id="deepBtn" class="primary">Run Comprehensive Asset Deep-Dive</button>
+          <span id="deepStatus" class="muted">Idle</span>
+        </div>
+      </div>
+      <div id="deepError"></div>
+
+      <div class="section-grid">
+        <div class="card">
+          <h3>Asset Fundamentals</h3>
+          <div id="fundamentals" class="grid"></div>
+        </div>
+        <div class="card">
+          <h3>Structural Pricing</h3>
+          <div id="structural" class="sr-wrap muted">Run deep-dive to load clustered support/resistance.</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>Technical Read</h3>
+        <div id="technicals" class="tf-grid"></div>
+      </div>
+
+      <div class="card">
+        <h3>Live News Feed</h3>
+        <div id="newsSources" class="muted" style="margin-bottom:0.5rem;"></div>
+        <div id="newsFeed" class="llm-box muted">No matching news items were found for this asset.</div>
+      </div>
+
+      <div class="card">
+        <h3>LLM Decision Support Report</h3>
+        <div id="deepReport"></div>
+      </div>
+    </section>
+  </div>
+
+  <script>
+    const scanBtn = document.getElementById('scanBtn');
+    const deepBtn = document.getElementById('deepBtn');
+    const scanStatus = document.getElementById('scanStatus');
+    const deepStatus = document.getElementById('deepStatus');
+    const topNSelect = document.getElementById('topNSelect');
+    const scopeSelect = document.getElementById('scopeSelect');
+
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        const tab = btn.getAttribute('data-tab');
+        document.getElementById('tab-scan').classList.toggle('active', tab === 'scan');
+        document.getElementById('tab-deep').classList.toggle('active', tab === 'deep');
+      });
+    });
+
+    function fmt(value, digits = 2) {
+      if (value === null || value === undefined || value === '') return '<span class="na">N/A</span>';
+      const num = Number(value);
+      if (Number.isNaN(num)) return String(value);
+      return num.toLocaleString(undefined, { maximumFractionDigits: digits, minimumFractionDigits: 0 });
+    }
+
+    function escapeHtml(str) {
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
+
+    function renderError(targetId, message) {
+      const node = document.getElementById(targetId);
+      if (!message) {
+        node.innerHTML = '';
+        return;
+      }
+      node.innerHTML = '<div class="error">' + escapeHtml(message) + '</div>';
+    }
+
+    function renderScannerRows(rows) {
+      const tbody = document.querySelector('#scanTable tbody');
+      tbody.innerHTML = '';
+      rows.forEach(r => {
+        const tr = document.createElement('tr');
+        const display = r.display || {};
+        const badge = r.needs_manual_review ? '<span class="badge">manual review</span>' : '';
+        const stale = Array.isArray(r.stale_badges) && r.stale_badges.length ? `<span class="badge">${escapeHtml(r.stale_badges[0])}</span>` : '';
+        tr.innerHTML = `
+          <td>${fmt(r.rank, 0)}</td>
+          <td title="${escapeHtml((r.coingecko_categories || []).join(', ') || 'No categories')}">${escapeHtml(r.symbol)}${badge}${stale}</td>
+          <td>${escapeHtml(display.score || fmt(r.score, 2))}</td>
+          <td title="source: ticker.last_price">${escapeHtml(display.last_price || fmt(r.last_price, 8))}</td>
+          <td title="${escapeHtml(display.today_quote_volume_full || '')}">${escapeHtml(display.today_quote_volume || fmt(r.today_quote_volume, 0))}</td>
+          <td title="${escapeHtml(display.avg_daily_quote_volume_7d_full || '')}">${escapeHtml(display.avg_daily_quote_volume_7d || fmt(r.avg_daily_quote_volume_7d, 0))}</td>
+          <td>${escapeHtml(display.spike_ratio || 'N/A')}</td>
+          <td title="source: 24h high/low range">${escapeHtml(display.volatility_pct || fmt(r.volatility_pct, 2))}</td>
+          <td>${escapeHtml(r.recent_direction_label || 'unknown')}</td>
+          <td title="${escapeHtml(r.spread_source || 'unknown')}">${escapeHtml(display.spread_pct || fmt(r.spread_pct, 4))}</td>
+          <td title="${escapeHtml(display.depth_notional_0_5pct_full || '')} | ${escapeHtml(r.depth_source || 'unknown')}">${escapeHtml(display.depth_notional_0_5pct || fmt(r.depth_notional_0_5pct, 2))}</td>`;
+        tbody.appendChild(tr);
+      });
+    }
+
+    function renderStructuredReport(report) {
+      const container = document.getElementById('deepReport');
+      if (!report) {
+        container.innerHTML = '<div class="llm-box muted">technical data unavailable, please retry.</div>';
+        return;
+      }
+      const blocks = report.split(/\n\n+/).filter(Boolean);
+      container.innerHTML = blocks.map((b) => {
+        const titleMatch = b.match(/^([0-9]+\)|[A-Za-z ]+:)/);
+        const title = titleMatch ? `<div class="small">${escapeHtml(titleMatch[0])}</div>` : '';
+        return `<div class="llm-box" style="margin-bottom:0.55rem;">${title}${escapeHtml(b)}</div>`;
+      }).join('');
+    }
+
+    function renderFundamentals(data) {
+      const d = data.display || {};
+      const keys = [
+        ['market_cap', 'Market Cap', d.market_cap, d.market_cap_full],
+        ['volume_24h', '24h Volume', d.volume_24h, d.volume_24h_full],
+        ['circulating_supply', 'Circulating Supply', d.circulating_supply, ''],
+        ['total_supply', 'Total Supply', d.total_supply, ''],
+        ['max_supply', 'Max Supply', d.max_supply, ''],
+        ['ath', 'ATH', d.ath, data.ath_date || ''],
+        ['ath_date', 'ATH Date', data.ath_date || 'N/A', ''],
+        ['atl', 'ATL', d.atl, data.atl_date || ''],
+        ['atl_date', 'ATL Date', data.atl_date || 'N/A', ''],
+        ['fdv_estimated', 'FDV (Estimated)', d.fdv_estimated, d.fdv_estimated_full],
+        ['pct_from_ath', '% From ATH', d.pct_from_ath, ''],
+        ['market_cap_rank', 'Market Cap Rank', d.market_cap_rank, '']
+      ];
+      const el = document.getElementById('fundamentals');
+      el.innerHTML = keys.map(([k, label, value, tooltip]) => `
+        <div class="metric" title="${escapeHtml(tooltip || '')}">
+          <div class="k">${escapeHtml(label)}</div>
+          <div class="v">${escapeHtml(value || 'N/A')}</div>
+        </div>
+      `).join('');
+      const categories = Array.isArray(data.categories) ? data.categories : [];
+      const categoryHtml = categories.length ? categories.map(cat => `<span class="pill">${escapeHtml(cat)}</span>`).join('') : '<span class="muted">No categories</span>';
+      const linksHtml = [
+        data.homepage ? `<a href="${escapeHtml(data.homepage)}" target="_blank" rel="noopener">Homepage</a>` : null,
+        data.blockchain_site ? `<a href="${escapeHtml(data.blockchain_site)}" target="_blank" rel="noopener">Block Explorer</a>` : null,
+      ].filter(Boolean).join(' | ') || '<span class="muted">No links</span>';
+      const optionalScores = [];
+      if (d.community_score) optionalScores.push(`<span class="pill">Community score: ${escapeHtml(d.community_score)}</span>`);
+      if (d.developer_score) optionalScores.push(`<span class="pill">Developer score: ${escapeHtml(d.developer_score)}</span>`);
+      if (data.fundamentals_degraded === true) {
+        optionalScores.push('<span class="pill">Limited data - market cap/ATH/ATL unavailable</span>');
+      }
+      el.innerHTML += `<div class="metric" style="grid-column:1/-1;"><div class="k">Categories</div><div class="v">${categoryHtml}</div></div>`;
+      el.innerHTML += `<div class="metric" style="grid-column:1/-1;"><div class="k">Links</div><div class="v">${linksHtml}</div></div>`;
+      if (optionalScores.length) {
+        el.innerHTML += `<div class="metric" style="grid-column:1/-1;"><div class="k">Community / Dev</div><div class="v">${optionalScores.join(' ')}</div></div>`;
+      }
+    }
+
+    function renderTechnicals(technicals) {
+      const order = ['1m', '15m', '1h', '4h', '1d'];
+      const wrap = document.getElementById('technicals');
+      wrap.innerHTML = order.map(tf => {
+        const d = technicals[tf] || {};
+        const display = d.display || {};
+        const invalid = d.support === null || d.resistance === null;
+        const staleBadge = d.stale_badge ? `<span class="badge">${escapeHtml(d.stale_badge)}</span>` : '';
+        const wickRisk = display.wick_risk || (d.wick_risk_unusual === true ? 'High' : d.wick_risk_unusual === false ? 'Low' : 'N/A');
+        return `
+          <div class="tf-card">
+            <div class="tf-title">${tf} ${staleBadge}</div>
+            <div>RSI: ${escapeHtml(display.rsi14 || fmt(d.rsi14, 2))} (${escapeHtml(d.rsi_label || 'unknown')})</div>
+            <div>Trend: ${escapeHtml(d.trend_label || d.trend || 'unknown')}</div>
+            <div>Wick Rate: ${escapeHtml(display.wick_flag_rate_pct || 'N/A')}</div>
+            <div>Wick Risk: ${escapeHtml(wickRisk)}</div>
+            <div style="margin-top:0.35rem; color:${invalid ? '#9aa8b8' : '#dce7f5'};">
+              ${invalid ? 'insufficient data for this timeframe.' : `S/R: ${escapeHtml(display.support || fmt(d.support, 8))} / ${escapeHtml(display.resistance || fmt(d.resistance, 8))}`}
+            </div>
+          </div>`;
+      }).join('');
+    }
+
+    function renderStructural(data, technicals) {
+      const supports = data.support_levels || [];
+      const resistances = data.resistance_levels || [];
+      let marker = null;
+      ['15m', '1h', '4h', '1d', '1m'].forEach(tf => {
+        if (marker === null && technicals[tf] && technicals[tf].latest_close != null) marker = Number(technicals[tf].latest_close);
+      });
+      const rows = [];
+      if (marker != null) rows.push(`<div class="sr-line price-marker">Current Price Marker: ${fmt(marker, 8)}</div>`);
+      if (supports.length) {
+        supports.forEach(s => rows.push(`<div class="sr-line support">Support ${fmt(s.level, 8)} (touches ${fmt(s.touches, 0)})</div>`));
+      } else {
+        rows.push('<div class="sr-line muted">No validated support cluster</div>');
+      }
+      if (resistances.length) {
+        resistances.forEach(r => rows.push(`<div class="sr-line resistance">Resistance ${fmt(r.level, 8)} (touches ${fmt(r.touches, 0)})</div>`));
+      } else {
+        rows.push('<div class="sr-line muted">No validated resistance cluster</div>');
+      }
+      document.getElementById('structural').innerHTML = rows.join('');
+    }
+
+    function renderNews(data) {
+      const node = document.getElementById('newsFeed');
+      const sourceNode = document.getElementById('newsSources');
+      const used = Array.isArray(data.news_sources_used) ? data.news_sources_used : [];
+      sourceNode.textContent = used.length ? `Sources used: ${used.join(', ')}` : 'Sources used: none';
+      if (data.news_status !== 'ok' || !Array.isArray(data.news) || !data.news.length) {
+        node.innerHTML = 'No matching news items were found for this asset.';
+        return;
+      }
+      node.innerHTML = data.news.map(item => {
+        const t = escapeHtml(item.title || 'Untitled');
+        const s = escapeHtml(item.source || 'Unknown');
+        const p = escapeHtml(item.published_time || '');
+        const u = escapeHtml(item.url || '#');
+        return `<div style="margin-bottom:0.55rem;"><strong>${t}</strong><br><span class="muted">${s} | ${p}</span><br><a href="${u}" target="_blank" rel="noopener">Read more</a></div>`;
+      }).join('');
+    }
+
+    async function runScan() {
+      scanStatus.textContent = 'Loading...';
+      renderError('scanError', '');
+      try {
+        const params = new URLSearchParams({ top_n: topNSelect.value, scope: scopeSelect.value });
+        const res = await fetch('/api/scan?' + params.toString());
+        const data = await res.json();
+        renderScannerRows(data.rows || []);
+        document.getElementById('scanMessage').textContent = [data.message || '', data.stale_badge || ''].filter(Boolean).join(' | ');
+        document.getElementById('scanSummary').textContent = data.summary || 'Summary unavailable.';
+        document.getElementById('formula').textContent = data.scoring_formula || '';
+        if (data.error) renderError('scanError', data.error);
+        scanStatus.textContent = data.status === 'partial' ? 'Loaded (partial)' : 'Loaded';
+      } catch (err) {
+        renderError('scanError', 'Scanner request failed.');
+        scanStatus.textContent = 'Failed';
+      }
+    }
+
+    scanBtn.addEventListener('click', runScan);
+    topNSelect.addEventListener('change', runScan);
+    scopeSelect.addEventListener('change', runScan);
+
+    deepBtn.addEventListener('click', async () => {
+      const symbol = document.getElementById('symbolInput').value.trim();
+      if (!symbol) return;
+      deepStatus.textContent = 'Loading...';
+      renderError('deepError', '');
+      try {
+        const res = await fetch('/api/deepdive/' + encodeURIComponent(symbol));
+        const data = await res.json();
+        const fundamentalsPayload = Object.assign({}, data.fundamentals || {}, { fundamentals_degraded: data.fundamentals_degraded === true });
+        renderFundamentals(fundamentalsPayload);
+        renderTechnicals(data.technicals || {});
+        renderStructural(data, data.technicals || {});
+        renderNews(data);
+
+        if (data.error && String(data.error).toLowerCase().includes('technical data unavailable')) {
+          document.getElementById('deepReport').innerHTML = '<div class="llm-box muted">technical data unavailable, please retry.</div>';
+        } else {
+          renderStructuredReport(data.llm_report || '');
+        }
+
+        if (data.error) renderError('deepError', data.error);
+        deepStatus.textContent = data.status === 'partial' ? 'Loaded (partial)' : 'Loaded';
+      } catch (err) {
+        renderError('deepError', 'Deep-dive request failed.');
+        deepStatus.textContent = 'Failed';
+      }
+    });
+  </script>
+</body>
+</html>
